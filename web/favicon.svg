@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- Reserve tile, simplified for small sizes: the stripes become flat grey. -->
+  <style>
+    .s{fill:#3B7A57}.b{fill:#A39982}.n{fill:#E30B5C}
+    @media (prefers-color-scheme: dark){.s{fill:#6DBE8F}.n{fill:#FF3D82}}
+  </style>
+  <rect class="s" x="6" y="6.3" width="19.1" height="35.5" rx="4"/>
+  <rect class="b" x="27.1" y="6.3" width="5.7" height="35.5" rx="2.85"/>
+  <rect class="n" x="35" y="14" width="7" height="27.8" rx="3.5"/>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Sellable Reserves">
+  <!-- Reserve tile: sellable (green), too large to sell in time (striped), no market (pink, dropped). -->
+  <defs>
+    <pattern id="sr-stripes" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="3" height="3" fill="#A39982"/><rect width="1.5" height="3" fill="#958B74"/>
+    </pattern>
+  </defs>
+  <rect fill="#3B7A57" x="6" y="6.3" width="19.1" height="35.5" rx="4"/>
+  <rect fill="url(#sr-stripes)" x="27.1" y="6.3" width="5.7" height="35.5" rx="2.85"/>
+  <rect fill="#E30B5C" x="35" y="14" width="7" height="27.8" rx="3.5"/>
+</svg>

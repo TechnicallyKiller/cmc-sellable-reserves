@@ -14,13 +14,21 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 <a class="skip" href="#view">Skip to content</a>
 <header class="site-header">
   <a class="brand" href="#/" aria-label="Sellable Reserves home">
-    <span class="brand-mark"><span></span></span>
+    <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+      <defs><pattern id="hdr-stripes" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="st-a" width="3" height="3"/><rect class="st-b" width="1.5" height="3"/></pattern></defs>
+      <rect class="col-s" x="6" y="6.3" width="19.1" height="35.5" rx="4"/>
+      <rect class="col-b" x="27.1" y="6.3" width="5.7" height="35.5" rx="2.85" fill="url(#hdr-stripes)"/>
+      <rect class="col-n" x="35" y="14" width="7" height="27.8" rx="3.5"/>
+    </svg>
     <span class="brand-name">Sellable Reserves</span>
   </a>
   <nav class="site-nav" aria-label="Main">

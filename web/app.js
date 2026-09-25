@@ -148,7 +148,7 @@ function renderView(r) {
 /* ---------------- screens ---------------- */
 function warmHTML() {
   return `<section class="warm stagger">
-    <div class="spin" style="--i:0"><span></span></div>
+    <div class="spin" style="--i:0" aria-hidden="true"><i></i><i></i><i></i></div>
     <h1 tabindex="-1" style="--i:1">Fetching live data from CoinMarketCap…</h1>
     <p style="--i:2">The server has just started. Loading reserves for the top 100 exchanges and prices for every token they hold takes about half a minute. This page will update on its own.</p>
   </section>`;

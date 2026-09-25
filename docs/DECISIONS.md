@@ -204,9 +204,10 @@ than quotes.
 - ≈ 21,000/day ≈ 126,000 through 30 Sep. Fits.
 - Rate: a 10-min refresh bursts ~102 requests; limit is 600/min.
 
-**Deferred by user.** Behaviour after 1 Oct (Basic, 15,000/month) is out of
-scope for now. At the rates above the credits would run out within the first
-day on Basic. Must be revisited before 30 Sep.
+**Closed by user (2026-09-25).** The user states the hackathon key keeps its
+Startup allowance through judging, so no Basic-tier fallback is built. If the
+key did revert to Basic (15,000/month), the rates above would use that in
+under a day and the site would stop refreshing.
 
 **Host (decided by user 2026-09-25): Render free web service**, kept awake
 by an external cron pinging `/api/status` (free services sleep after 15 min

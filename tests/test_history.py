@@ -22,5 +22,10 @@ class HistoryRows(unittest.TestCase):
         self.assertEqual((rows[0]["sellable_7d"], rows[0]["slug"]), (0.04, "lbank"))
 
 
+    def test_auth_headers_per_key_format(self):
+        self.assertEqual(history.History(url="u", key="sb_secret_abc")._auth(), {"apikey": "sb_secret_abc"})
+        self.assertEqual(history.History(url="u", key="eyJhbGc")._auth(), {"apikey": "eyJhbGc", "Authorization": "Bearer eyJhbGc"})
+
+
 if __name__ == "__main__":
     unittest.main()

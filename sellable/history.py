@@ -39,12 +39,19 @@ class History:
     def enabled(self):
         return bool(self.url and self.key)
 
+    def _auth(self):
+        # New secret keys (sb_secret_...) are not JWTs and go only in `apikey`;
+        # legacy service_role keys (JWTs, "eyJ...") also need Authorization: Bearer.
+        h = {"apikey": self.key}
+        if self.key.startswith("eyJ"):
+            h["Authorization"] = f"Bearer {self.key}"
+        return h
+
     def _request(self, method, path, body=None, extra_headers=None):
         req = urllib.request.Request(f"{self.url}/rest/v1/{path}", method=method,
                                      data=json.dumps(body).encode() if body is not None else None,
-                                     headers={"apikey": self.key, "Authorization": f"Bearer {self.key}",
-                                              "Content-Type": "application/json", "User-Agent": USER_AGENT,
-                                              **(extra_headers or {})})
+                                     headers={**self._auth(), "Content-Type": "application/json",
+                                              "User-Agent": USER_AGENT, **(extra_headers or {})})
         with urllib.request.urlopen(req, timeout=20) as resp:
             raw = resp.read()
         return json.loads(raw) if raw else None
