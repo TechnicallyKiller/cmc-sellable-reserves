@@ -15,8 +15,10 @@ API:
 Static files are served from ./web if it exists.
 """
 import argparse
+import hashlib
 import html
 import json
+import re
 import logging
 import os
 import threading
@@ -42,10 +44,22 @@ SITE_DESC = ("Of the reserves your crypto exchange shows you, how much could act
              "within a week? Live data from the CoinMarketCap API.")
 
 
+def _fingerprint(match):
+    """Append ?v=<content hash> to a local asset URL so browsers fetch new versions after a deploy."""
+    attr, path = match.group(1), match.group(2)
+    try:
+        with open(os.path.join(HERE, "web", path.lstrip("/")), "rb") as f:
+            v = hashlib.sha256(f.read()).hexdigest()[:10]
+    except OSError:
+        return match.group(0)
+    return f'{attr}="{path}?v={v}"'
+
+
 def page_with_meta(title, desc, url, image):
-    """index.html with Open Graph / Twitter card tags filled in."""
+    """index.html with Open Graph / Twitter card tags filled in and asset URLs fingerprinted."""
     with open(os.path.join(HERE, "web", "index.html"), encoding="utf-8") as f:
         page = f.read()
+    page = re.sub(r'(src|href)="(/[\w.-]+\.(?:js|css|svg|png))"', _fingerprint, page)
     e = html.escape
     tags = (f'<meta property="og:type" content="website">\n'
             f'<meta property="og:title" content="{e(title)}">\n'
@@ -65,6 +79,13 @@ def make_handler(live: Live, asker: Asker, history: History):
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *a, **kw):
             super().__init__(*a, directory=os.path.join(HERE, "web"), **kw)
+
+        def end_headers(self):
+            # Static files: always revalidate (cheap 304 via Last-Modified) so a deploy shows up
+            # immediately. API responses set their own no-store.
+            if not self.path.startswith("/api/"):
+                self.send_header("Cache-Control", "no-cache")
+            super().end_headers()
 
         def _json(self, code, obj):
             body = dumps(obj)
