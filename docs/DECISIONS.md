@@ -421,3 +421,40 @@ violations across 16 screen states.
 
 **Would be wrong if.** Screen-reader users find the chart summaries
 insufficient. Each chart also has a table view with every plotted value.
+
+---
+
+## D12 — MCP server for agents (decided by user 2026-09-25)
+
+**What.** `/mcp` on the same server: four read-only tools
+(`get_exchange_reserves`, `list_exchanges`, `compare_exchanges`,
+`token_exposure`) over the cached view. No extra CMC credits per call.
+
+**Protocol (MCP spec pages fetched 2026-09-25).** Latest revision 2026-07-28
+is stateless: no `initialize`; each request carries `_meta` protocol version
+and client capabilities; HTTP headers `MCP-Protocol-Version`, `Mcp-Method`
+and (tools/call) `Mcp-Name` must match the body (`-32020` HeaderMismatch);
+unsupported version → 400 `-32022`; unknown method → 404 `-32601`;
+`server/discover` is mandatory; GET/DELETE → 405; Origin must be validated
+(403). Earlier revisions (2025-11-25 and before) use `initialize`. The server
+is dual-era so current clients work either way.
+
+**Alternatives.** Official Python SDK: rejected to keep the project
+dependency-free (D5). stdio transport: needs local install; a remote endpoint
+lets any agent connect by URL.
+
+**Evidence.**
+- 20 unit tests (`tests/test_mcp.py`): both eras, header validation, error
+  codes, Origin, rate limit, each tool against real fixture data.
+- Official MCP Inspector CLI 2.8.0 connected, listed tools and called all
+  four; server log shows it used the legacy path.
+- Modern path exercised over HTTP with curl (discover, tools/call, 405, 403);
+  no independent modern client was available to test against.
+
+**Safety.** Tools describe data only; every result carries the limits and
+receipt URLs. The server instructions tell agents not to present results as
+a deposit/withdraw/buy/sell recommendation.
+
+**Would be wrong if.** A modern-only client rejects something the unit tests
+and curl didn't catch. Re-test when a 2026-07-28 client is available.
+

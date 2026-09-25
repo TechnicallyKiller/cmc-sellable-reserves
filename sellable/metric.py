@@ -145,6 +145,8 @@ def money_label(x):
     """Same rounding as the frontend: 3 significant figures, $B/$M/$K."""
     if x is None:
         return None
+    if x == 0:
+        return "$0"
     for unit, div in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
         if x >= div:
             return f"${float(f'{x / div:.3g}'):g}{unit}"
@@ -172,13 +174,6 @@ def days_label(d):
     return duration(d)
 
 
-def _money(x):
-    for unit, div in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
-        if x >= div:
-            return f"${x / div:,.1f}{unit}".replace(".0" + unit, unit)
-    return f"${x:,.0f}"
-
-
 def _pct(x):
     p = x * 100
     return f"{p:.0f}%" if p >= 1 or p == 0 else "Under 1%"
@@ -197,7 +192,7 @@ def sentence(name, result, horizon=HEADLINE_HORIZON):
         amount = "Less than 1% of it"
     else:
         amount = f"About {share * 100:.0f}% of it"
-    parts = [f"{name} shows {_money(reported)} in reserves.",
+    parts = [f"{name} shows {money_label(reported)} in reserves.",
              f"{amount} could be sold within {span}."]
     worst = biggest_blocker(result, horizon)
     if worst is not None:

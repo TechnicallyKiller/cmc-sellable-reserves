@@ -26,8 +26,34 @@ Raw API responses captured while deciding: [`evidence/`](evidence/).
   response it came from.
 - **Ask panel:** questions answered from the live data, by an LLM when
   configured, otherwise by rule-based answers. Never gives buy/sell advice.
+- **MCP server:** the same data as read-only tools for AI agents (below).
 - **Flags:** CoinMarketCap notices (e.g. shutdowns), wallets listed by more
   than one exchange, and duplicate wallet rows counted once.
+
+## For AI agents (MCP)
+
+`/mcp` is a remote [Model Context Protocol](https://modelcontextprotocol.io)
+server (Streamable HTTP), so agents that manage assets can check an
+exchange's reserve liquidity before acting. Read-only, no login, and it reads
+the server's cached data, so agent calls spend no CMC credits.
+
+```bash
+claude mcp add --transport http sellable-reserves https://<your-app>/mcp   # Claude Code
+npx @modelcontextprotocol/inspector --cli https://<your-app>/mcp --transport http --method tools/list
+```
+
+| Tool | Returns |
+|---|---|
+| `get_exchange_reserves(exchange)` | reported total; sellable share and amount at 1/7/30 days; exact days until 50% / 90% sellable; no-market share; top holdings with days-to-sell and supply share; notices; shared wallets; receipt URLs |
+| `list_exchanges(horizon_days, sort, filter, limit)` | screen all exchanges, e.g. `filter: "under_half"` |
+| `compare_exchanges(exchanges[], horizon_days)` | side-by-side figures for 2–10 exchanges |
+| `token_exposure(symbol)` | every exchange holding a token: value, share of its reserves, days to sell, share of supply |
+
+Every result carries plain text plus `structuredContent`, and states the
+limits (not solvency, best case, $500k wallet floor, no timestamps). Protocol:
+modern 2026-07-28 (stateless, header validation) and legacy
+2025-11-25 / 2025-06-18 / 2025-03-26 (`initialize`). Origin checked against
+DNS rebinding; 60 requests per minute per client.
 
 ## Metric
 
@@ -118,6 +144,7 @@ shows a warm-up screen meanwhile.
 | `GET /api/receipt?path=...` | the raw CMC response behind a number |
 | `POST /api/ask` | `{question, slug}` → LLM answer or `{fallback: true}` |
 | `GET /e/<slug>` | share link with preview tags for that exchange |
+| `POST /mcp` | MCP server for AI agents (see above) |
 
 Raw responses are stored gzipped under `data/`. Quotes: every refresh for the
 last hour, then one per hour.

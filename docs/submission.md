@@ -34,8 +34,9 @@ Numbers below are from 2026-09-25; read them off the live site when recording.
    shutdown notice from CoinMarketCap, 82% in a token with no trading.
 6. **1:25 — Compare.** The scatter: most exchanges sit near 100%; LBank and
    Blockfinex sit alone at the bottom. Filter "Under half sellable".
-7. **1:40 — Ask.** "Why is Binance not 100%?" Show the AI answer, labelled,
-   with its source link.
+7. **1:40 — Ask + MCP.** "Why is Binance not 100%?" Show the AI answer,
+   labelled, with its source link. Then show an agent calling the MCP tool
+   `token_exposure("BNB")` via Claude Code or the MCP Inspector.
 8. **1:50 — Close.** "Live CoinMarketCap data, refreshed every minute. Every
    number has a receipt. Reserves aren't solvency, and the page says so."
 
@@ -67,6 +68,8 @@ API behaviour observed while building, each with the response that shows it.
 - `/v1/exchange/info` adds `weekly_visits` and `notice`, which is how the site
   surfaces BitMart's shutdown notice next to its reserves.
 - v3 quotes: all ~800 held tokens in two calls (4–5 credits).
+- The same computed data is exposed to AI agents as an MCP server, with no
+  extra API calls per agent request.
 
 **Where it got in the way**
 1. Exchange assets rows have no per-balance or per-wallet timestamp, although

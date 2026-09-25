@@ -11,6 +11,7 @@ API:
   GET /api/history/<slug>                     hourly sellable shares (Supabase), if enabled
   POST /api/ask {question, slug}              LLM answer, or {"fallback": true}
   GET /e/<slug>                               share link: preview tags, then the exchange page
+  POST /mcp                                   MCP server (Streamable HTTP), read-only tools for AI agents
 Static files are served from ./web if it exists.
 """
 import argparse
@@ -27,6 +28,7 @@ from sellable.cmc import Client
 from sellable.history import History
 from sellable.metric import money_label, pct_label
 from sellable.live import Live, dumps
+from sellable.mcp import McpServer
 from sellable.store import Store
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,6 +56,8 @@ def page_with_meta(title, desc, url, image):
 
 
 def make_handler(live: Live, asker: Asker, history: History):
+    mcp = McpServer(lambda: live.view)
+
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *a, **kw):
             super().__init__(*a, directory=os.path.join(HERE, "web"), **kw)
@@ -82,6 +86,8 @@ def make_handler(live: Live, asker: Asker, history: History):
         def do_GET(self):
             url = urllib.parse.urlparse(self.path)
             origin = self._origin()
+            if url.path == "/mcp":
+                return self._mcp("GET")
             if url.path in ("/", "/index.html"):
                 return self._html(page_with_meta("Sellable Reserves", SITE_DESC, origin + "/", origin + "/og.png"))
             if url.path.startswith("/e/"):
@@ -131,7 +137,32 @@ def make_handler(live: Live, asker: Asker, history: History):
                     return self._json(404, {"error": "no such receipt"})
             return self._json(404, {"error": "not found"})
 
+        def _mcp(self, http_method):
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > 65536:
+                return self._json(413, {"error": "request too large"})
+            body = self.rfile.read(length) if length else b""
+            headers = {k.lower(): v for k, v in self.headers.items()}
+            ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
+            origin = self._origin()
+            status, ctype, payload = mcp.handle(http_method, headers, body, ip, origin, {origin})
+            if payload is None:
+                self.send_response(status)
+                if status == 405:
+                    self.send_header("Allow", "POST")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return self._json(status, payload)
+
+        def do_DELETE(self):
+            if urllib.parse.urlparse(self.path).path == "/mcp":
+                return self._mcp("DELETE")
+            return self._json(405, {"error": "method not allowed"})
+
         def do_POST(self):
+            if urllib.parse.urlparse(self.path).path == "/mcp":
+                return self._mcp("POST")
             if urllib.parse.urlparse(self.path).path != "/api/ask":
                 return self._json(404, {"error": "not found"})
             length = int(self.headers.get("Content-Length") or 0)
