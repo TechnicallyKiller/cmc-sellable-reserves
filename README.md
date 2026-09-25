@@ -7,6 +7,8 @@ within 1, 7 or 30 days, given each token's global 24h trading volume.
 
 Built for #BuildwithCMC. Track: **Data and Visualisation**.
 
+**Live:** https://cmc-sellable-reserves.onrender.com · **MCP endpoint:** `https://cmc-sellable-reserves.onrender.com/mcp`
+
 Decisions, evidence and limits: [`docs/DECISIONS.md`](docs/DECISIONS.md).
 Raw API responses captured while deciding: [`evidence/`](evidence/).
 
@@ -41,11 +43,11 @@ It is model-agnostic: any MCP client can use it, whichever LLM runs the agent.
 
 | Client | Connect |
 |---|---|
-| Claude Code | `claude mcp add --transport http sellable-reserves https://<your-app>/mcp` |
-| Gemini CLI | `gemini mcp add --transport http sellable-reserves https://<your-app>/mcp`, or `"mcpServers": {"sellable-reserves": {"httpUrl": "https://<your-app>/mcp"}}` in `settings.json` |
-| Codex (CLI / IDE) | `codex mcp add sellable-reserves --url https://<your-app>/mcp`, or `[mcp_servers.sellable-reserves]` with `url = "https://<your-app>/mcp"` in `config.toml` |
-| Any other MCP client | Streamable HTTP endpoint `https://<your-app>/mcp`, no auth |
-| MCP Inspector | `npx @modelcontextprotocol/inspector --cli https://<your-app>/mcp --transport http --method tools/list` |
+| Claude Code | `claude mcp add --transport http sellable-reserves https://cmc-sellable-reserves.onrender.com/mcp` |
+| Gemini CLI | `gemini mcp add --transport http sellable-reserves https://cmc-sellable-reserves.onrender.com/mcp`, or `"mcpServers": {"sellable-reserves": {"httpUrl": "https://cmc-sellable-reserves.onrender.com/mcp"}}` in `settings.json` |
+| Codex (CLI / IDE) | `codex mcp add sellable-reserves --url https://cmc-sellable-reserves.onrender.com/mcp`, or `[mcp_servers.sellable-reserves]` with `url = "https://cmc-sellable-reserves.onrender.com/mcp"` in `config.toml` |
+| Any other MCP client | Streamable HTTP endpoint `https://cmc-sellable-reserves.onrender.com/mcp`, no auth |
+| MCP Inspector | `npx @modelcontextprotocol/inspector --cli https://cmc-sellable-reserves.onrender.com/mcp --transport http --method tools/list` |
 
 Browser-based MCP clients send an `Origin` header, which the server checks
 against DNS rebinding; allow them with `MCP_ALLOWED_ORIGINS` (comma-separated).

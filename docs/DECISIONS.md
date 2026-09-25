@@ -477,3 +477,15 @@ a deposit/withdraw/buy/sell recommendation.
 **Would be wrong if.** A modern-only client rejects something the unit tests
 and curl didn't catch. Re-test when a 2026-07-28 client is available.
 
+---
+
+## Deployment check (2026-09-25)
+
+Deployed to https://cmc-sellable-reserves.onrender.com (Render). Against production: 23/23 browser checks
+(flows, keyboard, axe-core WCAG 2.2 AA in light and dark), MCP SDK client in
+both eras, and a real LLM agent via `/mcp`. Running the suite in production
+found one bug the local runs could not: with history data present, leaving
+an exchange page threw from a ResizeObserver on the removed chart (fixed in
+de5f248). The local server was stopped once Render was live so that only one
+instance spends credits and writes history.
+

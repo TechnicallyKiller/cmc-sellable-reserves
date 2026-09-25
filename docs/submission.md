@@ -5,7 +5,7 @@ Checklist for the DoraHacks submission (closes 30 Sep 2026, 23:59 UTC).
 | Required | Where |
 |---|---|
 | Public repo | https://github.com/TechnicallyKiller/cmc-sellable-reserves |
-| Working demo / deployed link | Render URL (to add after deploy) |
+| Working demo / deployed link | https://cmc-sellable-reserves.onrender.com (MCP: `https://cmc-sellable-reserves.onrender.com/mcp`) |
 | Screen recording | script below |
 | X post with #BuildwithCMC, linking the submission and the video | draft below |
 | CMC endpoints, named | README → "CoinMarketCap endpoints" |
@@ -52,6 +52,7 @@ Replace the two links before posting.
 >
 > Every number links to the raw API response.
 >
+> Live: https://cmc-sellable-reserves.onrender.com
 > Demo: <video link>
 > Submission: <DoraHacks link>
 > #BuildwithCMC
