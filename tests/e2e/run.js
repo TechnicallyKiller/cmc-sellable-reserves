@@ -99,6 +99,19 @@ async function check(name, fn) {
     await p.click('.row'); await wait(1500);
     assert.match(p.url(), /#\/exchange\//);
   });
+  await check('MCP page lists tools live and "Try it" returns a real tool result', async () => {
+    await p.goto(BASE + '/#/mcp'); await wait(1500);
+    assert.deepEqual(await p.$$eval('.tool-name', e => e.map(x => x.textContent)),
+      ['get_exchange_reserves', 'list_exchanges', 'compare_exchanges', 'token_exposure']);
+    await p.click('[data-try="0"]'); await p.waitForSelector('.try-text', { timeout: 15000 });
+    assert.match(await p.textContent('.try-text'), /is held by \d+ exchange/);
+    await p.click('[data-client="codex"]');
+    assert.match(await p.textContent('#panel-client code'), /^codex mcp add sellable-reserves --url /);
+  });
+  await check('docs page renders with its sections', async () => {
+    await p.goto(BASE + '/#/docs'); await wait(1000);
+    assert.ok((await p.$$('.doc-card')).length >= 8);
+  });
   await check('share link page carries preview tags', async () => {
     const html = await (await p.request.get(`${BASE}/e/${sample.slug}`)).text();
     assert.match(html, /<meta property="og:title" content="[^"]*sold within a week">/);
@@ -131,6 +144,7 @@ async function check(name, fn) {
       ['home', '/#/'], ['exchange', `/#/exchange/${sample.slug}`], ['compare', '/#/compare'],
       ['receipt open', `/#/exchange/${sample.slug}`, () => a.click('[data-rc="total"]')],
       ['ask open', '/#/compare', () => a.click('#ask-fab')],
+      ['docs', '/#/docs'], ['mcp (with a tool result)', '/#/mcp', () => a.click('[data-try="1"]')],
     ]) {
       await check(`${scheme} ${label}: no violations`, async () => {
         await a.goto(BASE + url); await wait(1500);

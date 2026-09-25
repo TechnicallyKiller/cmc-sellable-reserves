@@ -28,7 +28,8 @@ Raw API responses captured while deciding: [`evidence/`](evidence/).
   response it came from.
 - **Ask panel:** questions answered from the live data, by an LLM when
   configured, otherwise by rule-based answers. Never gives buy/sell advice.
-- **MCP server:** the same data as read-only tools for AI agents (below).
+- **MCP server:** the same data as read-only tools for AI agents (below), with a page at `/#/mcp` to connect a client and try the tools live.
+- **Docs** at `/#/docs`: the metric, data sources, cleaning, limits and the public API.
 - **Flags:** CoinMarketCap notices (e.g. shutdowns), wallets listed by more
   than one exchange, and duplicate wallet rows counted once.
 

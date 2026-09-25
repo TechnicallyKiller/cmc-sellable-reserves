@@ -34,6 +34,8 @@
   <nav class="site-nav" aria-label="Main">
     <a class="pill" href="#/" data-nav="home">Search</a>
     <a class="pill" href="#/compare" data-nav="compare">Compare</a>
+    <a class="pill" href="#/docs" data-nav="docs">Docs</a>
+    <a class="pill" href="#/mcp" data-nav="mcp">MCP</a>
     <span class="live warming" id="live" role="status" aria-live="polite"><span class="live-dot"></span><span id="live-text">Connecting…</span></span>
     <div class="seg xs" role="group" aria-label="Theme">
       <button type="button" data-theme-opt="light">Light</button>
@@ -47,6 +49,7 @@
 <footer class="site-footer">
   <span>Data: CoinMarketCap API, live. Prices refresh every minute, reserves every 10 minutes.</span>
   <span>Not financial advice.</span>
+  <a href="#/docs">Docs</a> <a href="#/mcp">MCP for AI agents</a> <a href="https://github.com/TechnicallyKiller/cmc-sellable-reserves" target="_blank" rel="noopener">Source</a>
 </footer>
 
 <button type="button" class="ask-fab" id="ask-fab"><span class="q" aria-hidden="true">?</span><span id="ask-fab-label">Ask about reserves</span></button>
@@ -86,6 +89,7 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <script src="/charts.js" defer></script>
+<script src="/pages.js" defer></script>
 <script src="/app.js" defer></script>
 </body>
 </html>

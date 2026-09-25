@@ -83,6 +83,8 @@ function route() {
   const m = h.match(/^\/exchange\/([^/?]+)/);
   if (m) return { screen: 'exchange', slug: decodeURIComponent(m[1]), params };
   if (h.startsWith('/compare')) return { screen: 'compare', params };
+  if (h.startsWith('/docs')) return { screen: 'docs', params };
+  if (h.startsWith('/mcp')) return { screen: 'mcp', params };
   return { screen: 'home', params };
 }
 
@@ -97,6 +99,7 @@ function syncUrl() {
   const p = new URLSearchParams();
   if (state.hz !== 7) p.set('hz', state.hz);
   if (r.screen === 'compare') { if (state.sort !== 'pct') p.set('sort', state.sort); if (state.filter !== 'all') p.set('filter', state.filter); }
+  if (r.screen === 'docs' || r.screen === 'mcp') return;
   const base = r.screen === 'exchange' ? `#/exchange/${encodeURIComponent(r.slug)}` : r.screen === 'compare' ? '#/compare' : '#/';
   const next = base + (p.toString() ? '?' + p : '');
   if (location.hash !== next) history.replaceState(null, '', next);
@@ -128,9 +131,19 @@ function afterNav(r, first) {
   if (r.screen === 'exchange') state.lastSlug = r.slug;
 }
 
+let unbindPage = null;
+
 function renderView(r) {
   const view = $('#view');
   $$('[data-nav]').forEach(a => a.setAttribute('aria-current', a.dataset.nav === r.screen ? 'page' : 'false'));
+  unbindPage?.(); unbindPage = null;
+  if (r.screen === 'docs' || r.screen === 'mcp') {
+    // Static pages: available even while live data is still loading.
+    view.innerHTML = r.screen === 'docs' ? Pages.docsHTML(state.list && state.list.coverage) : Pages.mcpHTML();
+    unbindPage = Pages.bind(view, r.screen, toast);
+    window.scrollTo(0, 0); updateAskContext(); state.rendered = true;
+    return;
+  }
   if (!ready()) { view.innerHTML = warmHTML(); state.rendered = true; return; }
   if (r.screen === 'home') view.innerHTML = homeHTML();
   else if (r.screen === 'compare') view.innerHTML = compareHTML();
@@ -918,7 +931,7 @@ async function poll() {
   const wasReady = ready();
   const before = state.list && state.list.quotes_fetched_at;
   try { await loadList(); } catch (_) { updateLive(); return; }
-  if (!wasReady && ready()) { navigate(); return; }
+  if (!wasReady && ready()) { if (!['docs', 'mcp'].includes(route().screen)) navigate(); return; }
   if (!ready() || state.list.quotes_fetched_at === before) return;
   const r = route();
   if (r.screen === 'exchange' && state.details[r.slug]?.has_data) {
