@@ -208,7 +208,12 @@ than quotes.
 scope for now. At the rates above the credits would run out within the first
 day on Basic. Must be revisited before 30 Sep.
 
-**Still open.** Host (must be always-on; free-tier limits not yet verified).
+**Host (decided by user 2026-09-25): Render free web service**, kept awake
+by an external cron pinging `/api/status` (free services sleep after 15 min
+without traffic). Config: `render.yaml`. Consequences: the disk is ephemeral,
+so stored raw responses reset on every restart or deploy, and each restart
+costs one full refresh (~106 credits, ~35 s) before data shows; the frontend
+shows a warm-up screen during that window.
 
 **Would be wrong if.** Measured credit use per refresh differs from the
 figures above. The server logs `status.credit_count` of every call to check this.
@@ -258,8 +263,13 @@ user: the site must be easy for people who don't know crypto terms.
 **Would be wrong if.** Answers cite numbers not present in the cached data, or
 cost per question can't be capped. Then disable it and keep D6.
 
-**Still open.** LLM provider/model, host for the serverless function, and the
-rate limit.
+**Status (2026-09-25).** The Ask panel is built and answers with deterministic
+rules over the live data (in `web/app.js`): exchange summaries, "why not 100%",
+token lookups, notices, method questions, and a fixed refusal for buy/sell/move
+questions. Every answer cites a receipt. There is **no LLM yet**.
+
+**Still open.** Whether to add an LLM behind the same panel, which provider and
+model, and the rate limit. It would run on the same Render server.
 
 **Visual direction (user, 2026-09-25).** Interactive site, soft neumorphism
 with a touch of maximalism. Design brief: `design_prompt.md`.

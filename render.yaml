@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: cmc-sellable-reserves
+    runtime: python
+    plan: free
+    # No dependencies to install; the build step runs the test suite.
+    buildCommand: python3 -m unittest discover -s tests -t .
+    startCommand: python3 server.py
+    healthCheckPath: /api/status
+    envVars:
+      - key: CMC_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.12.3

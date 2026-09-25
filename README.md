@@ -42,7 +42,19 @@ python3 server.py --replay             # no key: serve the newest stored respons
 python3 -m unittest discover -s tests -t .
 ```
 
-API: `/api/status`, `/api/exchanges`, `/api/exchange/<slug>`,
+Then open http://localhost:8000.
+
+## Deploy (Render)
+
+`render.yaml` defines a free Python web service. Set `CMC_KEY` in the Render
+dashboard (it is never in the repo). Free services sleep after 15 minutes
+without traffic, so an external cron pings `/api/status` to keep it awake.
+The disk is ephemeral: after a restart the first refresh (~35 s, 106 credits)
+runs before data appears, and the page shows a warm-up screen meanwhile.
+
+## API
+
+`/api/status`, `/api/exchanges`, `/api/exchange/<slug>`,
 `/api/receipt?path=...` (the raw CMC response behind a number).
 
 Raw responses are stored gzipped under `data/`. Quotes: every refresh for the
