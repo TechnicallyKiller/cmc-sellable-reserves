@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sellable Reserves</title>
+<meta name="description" content="Of the reserves your crypto exchange shows you, how much could actually be sold within a week? Live data from the CoinMarketCap API.">
+<script>
+  // Set theme before first paint to avoid a flash.
+  (function(){var t;try{t=localStorage.getItem('sr-theme')}catch(_){}
+    if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+    document.documentElement.dataset.theme=t;})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="#/" aria-label="Sellable Reserves home">
+    <span class="brand-mark"><span></span></span>
+    <span class="brand-name">Sellable Reserves</span>
+  </a>
+  <nav class="site-nav" aria-label="Main">
+    <a class="pill" href="#/" data-nav="home">Search</a>
+    <a class="pill" href="#/compare" data-nav="compare">Compare</a>
+    <span class="live warming" id="live" role="status" aria-live="polite"><span class="live-dot"></span><span id="live-text">Connecting…</span></span>
+    <div class="seg xs" role="group" aria-label="Theme">
+      <button type="button" data-theme-opt="light">Light</button>
+      <button type="button" data-theme-opt="dark">Dark</button>
+    </div>
+  </nav>
+</header>
+
+<main id="view" tabindex="-1"></main>
+
+<footer class="site-footer">
+  <span>Data: CoinMarketCap API, live. Prices refresh every minute, reserves every 10 minutes.</span>
+  <span>Not financial advice.</span>
+</footer>
+
+<button type="button" class="ask-fab" id="ask-fab"><span class="q" aria-hidden="true">?</span><span id="ask-fab-label">Ask about reserves</span></button>
+<section class="ask" id="ask" role="dialog" aria-labelledby="ask-title" hidden>
+  <div class="ask-head">
+    <div class="t"><b id="ask-title">Ask about reserves</b><span>Answers use the live CoinMarketCap data on this site. No buy, sell or move advice.</span></div>
+    <button type="button" class="round-x" id="ask-close" aria-label="Close chat">×</button>
+  </div>
+  <div class="msgs" id="msgs" aria-live="polite"></div>
+  <div class="ask-sugg" id="ask-sugg"></div>
+  <form class="ask-form" id="ask-form">
+    <input id="ask-input" autocomplete="off" aria-label="Your question" placeholder="Ask in your own words">
+    <button type="submit" class="btn-calm">Ask</button>
+  </form>
+</section>
+
+<dialog class="receipt" id="receipt" aria-labelledby="receipt-title">
+  <div class="receipt-in">
+    <div class="receipt-top">
+      <span class="receipt-title" id="receipt-title"></span>
+      <button type="button" class="round-x" id="receipt-close" aria-label="Close receipt">×</button>
+    </div>
+    <span class="receipt-val" id="receipt-val"></span>
+    <div class="receipt-meta">
+      <span>Source</span><span>CoinMarketCap API</span>
+      <span>Fetched</span><span class="mono" id="receipt-at"></span>
+    </div>
+    <div class="receipt-ep" id="receipt-ep"></div>
+    <div class="receipt-raw">
+      <span class="eyebrow-sm" style="margin-bottom:6px">Values</span>
+      <div id="receipt-raw"></div>
+    </div>
+    <div class="receipt-files" id="receipt-files"></div>
+    <p class="receipt-note" id="receipt-note"></p>
+  </div>
+</dialog>
+
+<script src="/app.js" defer></script>
+</body>
+</html>
