@@ -448,8 +448,27 @@ lets any agent connect by URL.
   codes, Origin, rate limit, each tool against real fixture data.
 - Official MCP Inspector CLI 2.8.0 connected, listed tools and called all
   four; server log shows it used the legacy path.
-- Modern path exercised over HTTP with curl (discover, tools/call, 405, 403);
-  no independent modern client was available to test against.
+- Modern path exercised over HTTP with curl (discover, tools/call, 405, 403).
+- Official MCP TypeScript SDK client 2.1.0 (`tests/e2e/mcp_agent.mjs`), both
+  eras. It **found a bug** the unit tests missed: 2026-07-28 requires `ttlMs`
+  and `cacheScope` on `server/discover` and `tools/list` (caching page:
+  "Servers MUST include caching hints"); the SDK rejected results without
+  them. Fixed (1 h, public: the tool list is static and the same for all) and
+  a unit test added. Both eras then passed.
+- Real agent (Groq gpt-oss-120b via the SDK client) answered "compare LBank
+  and Bitget" by calling compare_exchanges and get_exchange_reserves; every
+  figure it quoted matched `/api/exchange/*`. Two failure modes found and fixed
+  in the tool text: it **invented token descriptions** ("Universal Market
+  Maker") when only symbols were given, and **invented a 100% supply share**
+  when the supply field was omitted. Tool text now gives CoinMarketCap's token
+  name, states "this data does not describe what a token is", spells out
+  missing values ("not reported by CoinMarketCap"), and labels the metric as
+  this site's calculation, not a CMC metric. Re-run: neither claim recurred.
+- Claude Code CLI could not be used for this test: the installed CLI is not
+  logged in and login is interactive.
+- Model-agnostic by design: MCP clients for Claude Code, Gemini CLI and Codex
+  connect by URL (config formats taken from each vendor's docs, 2026-09-25;
+  not run here). Browser-based clients need `MCP_ALLOWED_ORIGINS`.
 
 **Safety.** Tools describe data only; every result carries the limits and
 receipt URLs. The server instructions tell agents not to present results as

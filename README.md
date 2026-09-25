@@ -37,10 +37,18 @@ server (Streamable HTTP), so agents that manage assets can check an
 exchange's reserve liquidity before acting. Read-only, no login, and it reads
 the server's cached data, so agent calls spend no CMC credits.
 
-```bash
-claude mcp add --transport http sellable-reserves https://<your-app>/mcp   # Claude Code
-npx @modelcontextprotocol/inspector --cli https://<your-app>/mcp --transport http --method tools/list
-```
+It is model-agnostic: any MCP client can use it, whichever LLM runs the agent.
+
+| Client | Connect |
+|---|---|
+| Claude Code | `claude mcp add --transport http sellable-reserves https://<your-app>/mcp` |
+| Gemini CLI | `gemini mcp add --transport http sellable-reserves https://<your-app>/mcp`, or `"mcpServers": {"sellable-reserves": {"httpUrl": "https://<your-app>/mcp"}}` in `settings.json` |
+| Codex (CLI / IDE) | `codex mcp add sellable-reserves --url https://<your-app>/mcp`, or `[mcp_servers.sellable-reserves]` with `url = "https://<your-app>/mcp"` in `config.toml` |
+| Any other MCP client | Streamable HTTP endpoint `https://<your-app>/mcp`, no auth |
+| MCP Inspector | `npx @modelcontextprotocol/inspector --cli https://<your-app>/mcp --transport http --method tools/list` |
+
+Browser-based MCP clients send an `Origin` header, which the server checks
+against DNS rebinding; allow them with `MCP_ALLOWED_ORIGINS` (comma-separated).
 
 | Tool | Returns |
 |---|---|
@@ -112,6 +120,9 @@ Optional environment variables:
 - `tests/e2e/run.js`: browser checks of every flow, keyboard access, and an
   axe-core WCAG 2.2 AA audit of each screen in light and dark. Setup and usage
   are at the top of the file.
+- `tests/e2e/mcp_agent.mjs`: the official MCP SDK client against `/mcp` in
+  both protocol eras, then a real LLM agent (any OpenAI-compatible endpoint)
+  answering a question with the tools.
 
 ## Accessibility
 

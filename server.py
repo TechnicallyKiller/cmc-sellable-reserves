@@ -34,6 +34,10 @@ from sellable.store import Store
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+# Extra browser origins allowed to call /mcp (e.g. a web-based MCP client), comma-separated.
+# Non-browser clients send no Origin header and are unaffected.
+MCP_ALLOWED_ORIGINS = {o.strip().rstrip("/") for o in os.environ.get("MCP_ALLOWED_ORIGINS", "").split(",") if o.strip()}
+
 SITE_DESC = ("Of the reserves your crypto exchange shows you, how much could actually be sold "
              "within a week? Live data from the CoinMarketCap API.")
 
@@ -145,7 +149,7 @@ def make_handler(live: Live, asker: Asker, history: History):
             headers = {k.lower(): v for k, v in self.headers.items()}
             ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
             origin = self._origin()
-            status, ctype, payload = mcp.handle(http_method, headers, body, ip, origin, {origin})
+            status, ctype, payload = mcp.handle(http_method, headers, body, ip, origin, {origin} | MCP_ALLOWED_ORIGINS)
             if payload is None:
                 self.send_response(status)
                 if status == 405:

@@ -75,6 +75,13 @@ class Protocol(unittest.TestCase):
         self.assertIn("tools", p["result"]["capabilities"])
         self.assertEqual(p["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"], "sellable-reserves")
 
+    def test_modern_cacheable_results_carry_cache_hints(self):
+        for method in ("server/discover", "tools/list"):
+            r = self.call(*modern(method))[2]["result"]
+            self.assertIsInstance(r["ttlMs"], int)
+            self.assertGreaterEqual(r["ttlMs"], 0)
+            self.assertEqual(r["cacheScope"], "public")
+
     def test_modern_header_mismatch_and_missing(self):
         h, b = modern("tools/list", headers={"mcp-method": "tools/call"})
         st, _, p = self.call(h, b)
@@ -184,6 +191,13 @@ class Tools(unittest.TestCase):
         self.assertEqual([h["slug"] for h in d["holders"]], ["blockfinex"])
         self.assertIsNone(d["holders"][0]["days_to_sell"])
         self.assertTrue(self.tool("token_exposure", {"symbol": "NOPE"})["isError"])
+
+    def test_text_states_missing_values_instead_of_omitting_them(self):
+        # Models fill gaps: every field an agent might quote is spelled out, including when CMC has no value.
+        t = self.tool("token_exposure", {"symbol": "USDZ"})["content"][0]["text"]
+        self.assertIn("share of circulating supply not reported by CoinMarketCap", t)
+        self.assertIn("this site's calculation", t)
+        self.assertIn("does not describe what a token is", t)
 
     def test_unknown_tool_is_protocol_error(self):
         st, _, p = self.s.handle("POST", *modern("tools/call", {"name": "delete_everything", "arguments": {}}), "6.6.6.6", ORIGIN, {ORIGIN})

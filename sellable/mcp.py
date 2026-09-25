@@ -26,11 +26,20 @@ LEGACY = ("2025-11-25", "2025-06-18", "2025-03-26")
 SUPPORTED = (MODERN,) + LEGACY
 SERVER_INFO = {"name": "sellable-reserves", "title": "Sellable Reserves", "version": "1.0.0"}
 PER_IP_PER_MIN = 60
+CACHE_TTL_MS = 3_600_000
 
-LIMITS = ("Limits: reserves are assets only, not solvency (liabilities are not published). "
+def supply_text(x):
+    return "not reported by CoinMarketCap (no circulating supply)" if x is None else metric.pct_label(x) if x >= 0.01 else f"{x * 100:.2f}%"
+
+
+LIMITS = ("Method: 'sellable' and 'days to sell' are this site's calculation from CoinMarketCap data, "
+          "not CoinMarketCap metrics. Limits: reserves are assets only, not solvency (liabilities are not published). "
           "'Sellable' is a best case: it assumes the exchange could sell into all of the world's "
           "24h trading of each token. CoinMarketCap lists only wallets over $500k, balances have no "
           "timestamp, and CMC does not verify them. This is data, not financial advice.")
+
+TOKEN_NOTE = ("Token names are as listed by CoinMarketCap; this data does not describe what a token is, "
+              "who issues it or what backs it.")
 
 INSTRUCTIONS = (
     "Sellable Reserves measures how much of a crypto exchange's published proof-of-reserves could "
@@ -39,7 +48,7 @@ INSTRUCTIONS = (
     "Use get_exchange_reserves for one exchange, list_exchanges to screen, compare_exchanges for "
     "side-by-side figures, and token_exposure to see which exchanges hold a token. "
     "Report the numbers and the stated limits; do not present them as a recommendation to deposit, "
-    "withdraw, buy or sell. " + LIMITS)
+    "withdraw, buy or sell. Do not describe what a token is beyond its CoinMarketCap name. " + LIMITS)
 
 READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
 HORIZON = {"type": "integer", "enum": [1, 7, 30], "default": 7,
@@ -227,11 +236,14 @@ class McpServer:
             logging.getLogger("mcp").info("tools/call %s (%s)", params.get("name"), "modern" if modern else "legacy")
         if method == "ping":
             return {}
+        # 2026-07-28 caching: discover and tools/list MUST carry ttlMs and cacheScope.
+        # Both are static and identical for every caller.
+        cache = {"ttlMs": CACHE_TTL_MS, "cacheScope": "public"} if modern else {}
         if method == "server/discover" and modern:
             return {"supportedVersions": list(SUPPORTED), "capabilities": {"tools": {"listChanged": False}},
-                    "instructions": INSTRUCTIONS}
+                    "instructions": INSTRUCTIONS, **cache}
         if method == "tools/list":
-            return {"tools": TOOLS}
+            return {"tools": TOOLS, **cache}
         if method == "tools/call":
             name, args = params.get("name"), params.get("arguments") or {}
             if name not in TOOL_NAMES:
@@ -316,8 +328,11 @@ class McpServer:
             f"{metric.pct_label(ex['sellable_share'][7])} / {metric.pct_label(ex['sellable_share'][30])}.",
             f"Half sellable in: {'never (tokens with no trading block it)' if half is None else metric.days_label(half)}. "
             f"No market: {metric.pct_label(ex['no_market_share'])} ({metric.money_label(ex['no_market_usd'])}).",
-            "Top holdings: " + "; ".join(f"{h['symbol']} {metric.pct_label(h['share'])} ({metric.money_label(h['usd'])}, "
-                                         f"{metric.days_label(h['days_to_sell'])} to sell)" for h in ex["holdings"][:5]) + ".",
+            "Top holdings (symbol, CoinMarketCap name): " + "; ".join(
+                f"{h['symbol']} ({h['name']}) {metric.pct_label(h['share'])} ({metric.money_label(h['usd'])}, "
+                f"{metric.days_label(h['days_to_sell'])} to sell, share of circulating supply {supply_text(h['supply_share'])})"
+                for h in ex["holdings"][:5]) + ".",
+            TOKEN_NOTE,
         ]
         if ex.get("notice"):
             notice = re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", ex["notice"])  # drop markdown link targets
@@ -407,8 +422,9 @@ class McpServer:
         ids = {r["crypto_id"] for r in out}
         note = (f" Note: {len(ids)} different tokens share the symbol {sym}; check crypto_id." if len(ids) > 1 else "")
         total = sum(r["value_usd"] for r in out)
-        text = (f"{sym} is held by {len(out)} exchange{'s' if len(out) > 1 else ''}, {metric.money_label(total)} in total.{note}\n" +
+        text = (f"{sym} ({out[0]['token']} on CoinMarketCap) is held by {len(out)} exchange{'s' if len(out) > 1 else ''}, {metric.money_label(total)} in total.{note}\n" +
                 "\n".join(f"- {r['exchange']}: {metric.money_label(r['value_usd'])} "
                           f"({metric.pct_label(r['share_of_exchange_reserves'])} of its reserves), "
-                          f"{metric.days_label(r['days_to_sell'])} to sell" for r in out[:15]) + f"\n{LIMITS}")
+                          f"{metric.days_label(r['days_to_sell'])} to sell, 24h volume {metric.money_label(r['volume_24h_usd'])}, "
+                          f"share of circulating supply {supply_text(r['share_of_circulating_supply'])}" for r in out[:15]) + f"\n{TOKEN_NOTE}\n{LIMITS}")
         return text, {"symbol": sym, "total_value_usd": round(total, 2), "holders": out, "limits": LIMITS, **self._as_of(view)}
