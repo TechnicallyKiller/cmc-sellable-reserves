@@ -139,12 +139,12 @@ function homeHTML() {
   const c = state.list.coverage;
   const chips = ['binance', 'lbank', 'blockfinex', 'bitmart']
     .map(s => state.list.exchanges.find(x => x.slug === s && x.has_data)).filter(Boolean);
-  const h1a = 'Of what your exchange shows you, how much could';
-  const h1b = 'actually be sold';
+  const h1a = 'Your exchange says it has the money. Could it';
+  const h1b = 'actually sell it?';
   const n = h1a.split(' ').length;
   return `<section class="home">
     <p class="home-kicker pop">Proof of reserves, in plain words</p>
-    <h1 class="home-h1" tabindex="-1">${words(h1a)} <em>${words(h1b, n)}</em> ${words('in a week?', n + 3)}</h1>
+    <h1 class="home-h1" tabindex="-1">${words(h1a)} <em>${words(h1b, n)}</em></h1>
     <div class="search stagger">
       <label for="q" style="--i:6">Which exchange do you use?</label>
       <div class="search-wrap" style="--i:7">
@@ -638,7 +638,7 @@ function updateAskContext() {
 
 function paintMsgs() {
   const box = $('#msgs');
-  box.innerHTML = chat.msgs.map((m, i) => `<div class="msg ${m.role}"><span>${esc(m.text)}</span>${m.src ? `<button type="button" class="src-link" data-msg="${i}">Source · ${esc(m.srcLabel)}</button>` : ''}</div>`).join('')
+  box.innerHTML = chat.msgs.map((m, i) => `<div class="msg ${m.role}">${m.note ? `<span class="msg-note">${esc(m.note)}</span>` : ''}<span>${esc(m.text)}</span>${m.src ? `<button type="button" class="src-link" data-msg="${i}">Source · ${esc(m.srcLabel)}</button>` : ''}${m.ai ? `<span class="msg-ai">AI answer from the live data · ${esc(m.ai)}</span>` : ''}</div>`).join('')
     + (chat.typing ? '<div class="typing" aria-label="Checking the data"><i></i><i></i><i></i></div>' : '');
   box.scrollTop = box.scrollHeight;
 }
@@ -653,7 +653,7 @@ async function answer(q) {
   const src = (kind, extra) => ({ src: { kind, slug: d.slug, token: extra }, srcLabel: `${d.name} · ${kind === 'hold' ? 'holding' : kind === 'total' ? 'reserves' : 'sellable'}` });
 
   if (named && !named.has_data) return { text: `${named.name} doesn't publish any reserves that CoinMarketCap tracks, so there is nothing to measure. ${L.coverage.listed - L.coverage.with_data} of the top ${L.coverage.listed} exchanges are in the same position.` };
-  if (/(should i|withdraw|move my|sell my|\bbuy\b|is it safe|\bsafe\b|trust|invest)/.test(t)) {
+  if (ADVICE.test(t)) {
     if (!has) return { text: 'I can\'t tell you whether to buy, sell or move money. Open an exchange and I can tell you what its reserves data shows.' };
     return { text: `I can't tell you whether to buy, sell or move money. What the data shows for ${d.name}: ${money(d.reported_usd)} reported, ${pctLabel(d.sellable_share[7])}% sellable within 7 days, ${pctLabel(d.no_market_share)}% in tokens with no market. Reserves show what an exchange holds, not what it owes.`, ...src('pct') };
   }
@@ -695,11 +695,39 @@ async function answer(q) {
   return { text: `This site checks the reserves of CoinMarketCap's top ${L.coverage.listed} exchanges; ${L.coverage.with_data} publish any. Search for your exchange, or ask about one by name, e.g. "Summarize Binance".` };
 }
 
+const ADVICE = /(should i|withdraw|move my|sell my|\bbuy\b|is it safe|\bsafe\b|trust|invest)/;
+
+// LLM first (server /api/ask); rule-based answer() when it is unavailable,
+// rate limited or fails. Advice questions always get the fixed rule-based reply.
+async function llmAnswer(q) {
+  if (!ready() || ADVICE.test(q.toLowerCase())) return null;
+  const t = q.toLowerCase();
+  const named = [...state.list.exchanges].sort((a, b) => b.name.length - a.name.length).find(x => t.includes(x.name.toLowerCase()));
+  const d = named ? null : currentDetail();
+  const slug = named ? named.slug : d && d.slug;
+  try {
+    const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, slug }) });
+    const j = await r.json();
+    if (j.fallback || !j.answer) return { fallback: j.reason || 'error' };
+    const ex = slug && state.list.exchanges.find(x => x.slug === slug);
+    const src = ex && ex.has_data ? { src: { kind: 'pct', slug }, srcLabel: `${ex.name} · sellable` } : {};
+    return { text: j.answer, ai: j.model, ...src };
+  } catch (_) {
+    return { fallback: 'network' };
+  }
+}
+
 async function ask(q) {
   q = (q || '').trim(); if (!q) return;
   chat.msgs.push({ role: 'u', text: q }); chat.typing = true; paintMsgs();
   $('#ask-input').value = '';
-  const [a] = await Promise.all([answer(q), new Promise(r => setTimeout(r, reduceMotion.matches ? 0 : 500))]);
+  const minWait = new Promise(r => setTimeout(r, reduceMotion.matches ? 0 : 500));
+  let a = await llmAnswer(q);
+  if (!a || a.fallback) {
+    const busy = a && /rate_limited/.test(a.fallback);
+    a = { ...(await answer(q)), note: busy ? 'The AI assistant is busy, so this is a quick answer from the data.' : '' };
+  }
+  await minWait;
   chat.typing = false; chat.msgs.push({ role: 'b', ...a }); paintMsgs();
 }
 
