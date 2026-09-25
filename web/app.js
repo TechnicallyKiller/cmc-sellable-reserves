@@ -144,6 +144,7 @@ function renderView(r) {
     window.scrollTo(0, 0); updateAskContext(); state.rendered = true;
     return;
   }
+  document.body.classList.remove('suggesting');
   if (!ready()) { view.innerHTML = warmHTML(); state.rendered = true; return; }
   if (r.screen === 'home') view.innerHTML = homeHTML();
   else if (r.screen === 'compare') view.innerHTML = compareHTML();
@@ -670,7 +671,11 @@ function bindSearch() {
       : `<p class="empty">No exchange called “${esc(input.value.trim())}” in CoinMarketCap's top ${state.list.coverage.listed} by volume. ${state.list.coverage.listed - state.list.coverage.with_data} of those publish nothing anyway.</p>`;
     input.setAttribute('aria-activedescendant', active >= 0 ? `opt-${active}` : '');
   };
-  const show = on => { list.hidden = !on; input.setAttribute('aria-expanded', String(on)); if (on) paint(); };
+  const show = on => {
+    list.hidden = !on; input.setAttribute('aria-expanded', String(on));
+    document.body.classList.toggle('suggesting', on); // keeps the Ask button off the dropdown
+    if (on) paint();
+  };
   const pick = slug => { if (slug) location.hash = '#/exchange/' + slug; };
   input.addEventListener('focus', () => show(true));
   input.addEventListener('input', () => { active = -1; show(true); });

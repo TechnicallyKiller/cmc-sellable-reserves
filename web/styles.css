@@ -118,7 +118,9 @@ main:focus,h1[tabindex="-1"]:focus{outline:none}
 .home-h1 .w{display:inline-block;opacity:0;transform:translateY(.35em) rotate(2deg);animation:word .7s var(--ease-out) forwards;animation-delay:calc(var(--i) * 45ms)}
 .search{display:flex;flex-direction:column;gap:14px}
 .search label{font-size:19px;font-weight:600}
-.search-wrap{position:relative}
+/* Entrance animations give later siblings (chips, footer line) their own layers;
+   lift the search box so its dropdown paints above them. */
+.search-wrap{position:relative;z-index:30}
 .search-box{display:flex;align-items:center;gap:14px;border-radius:30px;box-shadow:var(--inset);padding:0 10px 0 24px;min-height:clamp(68px,10vw,86px);transition:box-shadow .3s}
 .search-box:focus-within{box-shadow:var(--inset),0 0 0 3px color-mix(in srgb,var(--calm) 35%,transparent)}
 .search-ico{position:relative;width:22px;height:22px;flex:none}
@@ -295,6 +297,7 @@ main:focus,h1[tabindex="-1"]:focus{outline:none}
 /* ---------- ask panel ---------- */
 .ask-fab{position:fixed;right:clamp(12px,3vw,32px);bottom:clamp(12px,3vw,32px);z-index:40;display:flex;align-items:center;gap:12px;padding:10px 22px 10px 10px;border-radius:999px;border:0;background:var(--bg);box-shadow:var(--raise);cursor:pointer;font-weight:700;font-size:16px;
   transition:transform .3s var(--ease-spring),box-shadow .25s,opacity .2s,display .3s;transition-behavior:allow-discrete}
+.suggesting .ask-fab{opacity:0;pointer-events:none;transform:scale(.9)}
 .ask-fab:hover{transform:translateY(-2px) scale(1.02)}
 .ask-fab:active{box-shadow:var(--inset-sm)}
 .ask-fab[hidden]{opacity:0;transform:scale(.8)}
