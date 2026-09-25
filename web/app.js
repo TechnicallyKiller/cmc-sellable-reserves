@@ -321,7 +321,8 @@ async function drawHistory(d) {
     <details class="chart-table"><summary>Show as table</summary><table><thead><tr><th scope="col">Time (UTC)</th><th scope="col">Sellable</th><th scope="col">Reported</th></tr></thead>
     <tbody>${pts.slice(-48).reverse().map(p => `<tr><td>${esc(p.t.toISOString().slice(0, 16).replace('T', ' '))}</td><td>${pctLabel(p.v)}%</td><td>${money(p.raw.reported_usd)}</td></tr>`).join('')}</tbody></table></details>`;
   const fmtT = t => t.toISOString().slice(5, 16).replace('T', ' ');
-  Charts.responsive($('#spark'), () => Charts.spark($('#spark'), {
+  const host = $('#spark');
+  Charts.responsive(host, () => Charts.spark(host, {
     points: pts, fmtT, fmt: p => [`${pctLabel(p.v)}%`, `${fmtT(p.t)} UTC · ${money(p.raw.reported_usd)} reported`],
     aria: `Sellable within ${HZ[state.hz].short} for ${d.name} over the last ${pts.length} hourly readings, from ${pctLabel(pts[0].v)}% to ${pctLabel(pts[pts.length - 1].v)}%.`,
   }));

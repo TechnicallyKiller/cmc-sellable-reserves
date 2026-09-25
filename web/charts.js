@@ -239,7 +239,12 @@ const Charts = (() => {
     let last = host.clientWidth;
     draw();
     if (!('ResizeObserver' in window)) return;
-    new ResizeObserver(() => { if (Math.abs(host.clientWidth - last) > 4) { last = host.clientWidth; draw(); } }).observe(host);
+    const ro = new ResizeObserver(() => {
+      // The chart's page may have been replaced by a navigation: stop watching it.
+      if (!host.isConnected) { ro.disconnect(); return; }
+      if (Math.abs(host.clientWidth - last) > 4) { last = host.clientWidth; draw(); }
+    });
+    ro.observe(host);
   }
 
   return { curve, scatter, spark, responsive };

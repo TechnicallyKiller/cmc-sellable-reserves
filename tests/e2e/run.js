@@ -52,7 +52,16 @@ async function check(name, fn) {
     const want = d.sellable_share['7'] === 0 ? '0' : d.sellable_share['7'] < 0.01 ? '<1' : d.sellable_share['7'] >= 0.995 && d.sellable_share['7'] < 1 ? '99' : String(Math.round(d.sellable_share['7'] * 100));
     assert.equal(big, want);
     assert.ok(await p.$('#curve svg'), 'curve not drawn');
-    assert.equal(await p.$$eval('.chart-table tbody tr', r => r.length), 6);
+    assert.equal(await p.$$eval('#curve ~ .chart-table tbody tr', r => r.length), 6);
+  });
+  await check('history chart (when enabled) survives navigating away', async () => {
+    const before = errors.length;
+    await p.goto(`${BASE}/#/exchange/${sample.slug}`); await wait(2500);
+    await p.goto(BASE + '/#/compare'); await wait(1500);
+    await p.setViewportSize({ width: 1000, height: 900 }); await wait(500);
+    await p.setViewportSize({ width: 1280, height: 900 });
+    await p.goto(`${BASE}/#/exchange/${sample.slug}`); await wait(1500);
+    assert.deepEqual(errors.slice(before), []);
   });
   await check('horizon toggle updates number and URL', async () => {
     await p.click('[data-hz="30"]'); await wait(900);
