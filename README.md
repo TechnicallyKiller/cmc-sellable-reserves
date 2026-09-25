@@ -44,10 +44,15 @@ python3 -m unittest discover -s tests -t .
 
 Then open http://localhost:8000.
 
+Optional: set `LLM_API_KEY` (Groq by default; any OpenAI-compatible endpoint via
+`LLM_BASE_URL` and `LLM_MODEL`) to let the Ask panel answer with an LLM grounded
+in the live data. Without it, or when rate limited, the panel uses rule-based
+answers.
+
 ## Deploy (Render)
 
 `render.yaml` defines a free Python web service. Set `CMC_KEY` in the Render
-dashboard (it is never in the repo). Free services sleep after 15 minutes
+dashboard (it is never in the repo), and optionally `LLM_API_KEY`. Free services sleep after 15 minutes
 without traffic, so an external cron pings `/api/status` to keep it awake.
 The disk is ephemeral: after a restart the first refresh (~35 s, 106 credits)
 runs before data appears, and the page shows a warm-up screen meanwhile.

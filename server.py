@@ -8,15 +8,18 @@ API:
   GET /api/exchanges
   GET /api/exchange/<slug>
   GET /api/receipt?path=<kind/ts/name.json>   raw CMC response behind a number
+  POST /api/ask {question, slug}              LLM answer, or {"fallback": true}
 Static files are served from ./web if it exists.
 """
 import argparse
+import json
 import logging
 import os
 import threading
 import urllib.parse
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
+from sellable.ask import MODEL, Asker
 from sellable.cmc import Client
 from sellable.live import Live, dumps
 from sellable.store import Store
@@ -24,7 +27,7 @@ from sellable.store import Store
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def make_handler(live: Live):
+def make_handler(live: Live, asker: Asker):
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *a, **kw):
             super().__init__(*a, directory=os.path.join(HERE, "web"), **kw)
@@ -66,6 +69,25 @@ def make_handler(live: Live):
                     return self._json(404, {"error": "no such receipt"})
             return self._json(404, {"error": "not found"})
 
+        def do_POST(self):
+            if urllib.parse.urlparse(self.path).path != "/api/ask":
+                return self._json(404, {"error": "not found"})
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > 4096:
+                return self._json(413, {"error": "request too large"})
+            try:
+                req = json.loads(self.rfile.read(length) or b"{}")
+            except ValueError:
+                return self._json(400, {"error": "invalid JSON"})
+            # Behind Render's proxy the client address is the first X-Forwarded-For entry.
+            ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
+            slug = req.get("slug") or None
+            answer, reason = asker.ask(live.view, req.get("question"), slug, ip)
+            if answer is None:
+                logging.getLogger("ask").info("fallback: %s", reason)
+                return self._json(200, {"fallback": True, "reason": reason})
+            return self._json(200, {"answer": answer, "model": MODEL})
+
         def log_message(self, fmt, *args):
             logging.getLogger("http").debug(fmt, *args)
 
@@ -90,7 +112,9 @@ def main():
         live = Live(store, Client(os.environ.get("CMC_KEY")))
         threading.Thread(target=live.run_forever, args=(stop,), daemon=True).start()
 
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(live))
+    asker = Asker()
+    logging.info("ask panel LLM: %s", f"enabled ({MODEL})" if asker.enabled else "disabled (no LLM_API_KEY), rule-based answers only")
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(live, asker))
     logging.info("serving on http://localhost:%d (%s)", args.port, "replay" if args.replay else "live")
     try:
         server.serve_forever()

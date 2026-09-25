@@ -268,8 +268,29 @@ rules over the live data (in `web/app.js`): exchange summaries, "why not 100%",
 token lookups, notices, method questions, and a fixed refusal for buy/sell/move
 questions. Every answer cites a receipt. There is **no LLM yet**.
 
-**Still open.** Whether to add an LLM behind the same panel, which provider and
-model, and the rate limit. It would run on the same Render server.
+**LLM (decided 2026-09-25): Groq free tier, `openai/gpt-oss-120b`**, via its
+OpenAI-compatible endpoint `https://api.groq.com/openai/v1`, from `POST /api/ask`
+on the same server. Key in `LLM_API_KEY` (user-supplied, never in the repo).
+- Evidence (Groq rate-limits page, 2026-09-25): free plan 30 RPM, 1K RPD,
+  8K TPM, 200K TPD for `openai/gpt-oss-120b`.
+- Alternatives checked the same day: OpenRouter `:free` models, 20 RPM but
+  only 50 requests/day without buying credits; Gemini, free limits not
+  published on the rate-limits page (shown only in AI Studio).
+- Grounding: the model gets a compact JSON extract of the live view and a
+  system prompt: use only that data, no buy/sell/move advice, reserves are not
+  solvency. On an exchange page the extract is that exchange with its top 10
+  holdings; elsewhere it is one line per exchange (measured on Binance: 5,812
+  chars with both, so the list is sent only when no exchange is in view).
+- Own limits, set below Groq's: 20/min and 900/day globally, 5/min per IP.
+- Buy/sell/move questions always get the fixed rule-based refusal, never the LLM.
+- **Fallback:** no key, local or upstream rate limit (HTTP 429), error, or empty
+  reply → the panel answers with the rule-based answers and, when rate
+  limited, says so.
+
+**Would be wrong if.** The 8K tokens/minute cap makes most questions fall back.
+Measured prompt size: system 1,281 chars + data up to ~5.8K chars, plus up to
+700 completion tokens; token counts are not yet measured. Check Groq's `usage`
+field once the key is set.
 
 **Visual direction (user, 2026-09-25).** Interactive site, soft neumorphism
 with a touch of maximalism. Design brief: `design_prompt.md`.
