@@ -5,7 +5,29 @@ Bitcoin and tokens nobody trades as if they were the same. This project shows,
 for each exchange, how much of its reported reserves could actually be sold
 within 1, 7 or 30 days, given each token's global 24h trading volume.
 
-Decisions, evidence and limits: [`docs/DECISIONS.md`](docs/DECISIONS.md). Raw API responses captured while deciding: [`evidence/`](evidence/).
+Built for #BuildwithCMC. Track: **Data and Visualisation**.
+
+Decisions, evidence and limits: [`docs/DECISIONS.md`](docs/DECISIONS.md).
+Raw API responses captured while deciding: [`evidence/`](evidence/).
+
+## What it shows
+
+- **Exchange page:** one plain sentence, the share sellable within 1 / 7 / 30
+  days, where the reported total sits (sellable, too large to sell in time,
+  no market), every holding with days-to-sell and share of circulating supply,
+  and the wallets behind it.
+- **Liquidity curve:** share sellable against time, 1 day to a year, with the
+  exact time until 50% and 90% become sellable (or "never" when tokens with no
+  trading block it).
+- **Compare:** all exchanges that publish reserves, sortable and filterable,
+  plus a scatter of reported size against sellable share (bubble = weekly visits).
+- **History** (optional, Supabase): hourly sellable share per exchange.
+- **Receipts:** tap any number to see the CMC endpoint, values and the raw
+  response it came from.
+- **Ask panel:** questions answered from the live data, by an LLM when
+  configured, otherwise by rule-based answers. Never gives buy/sell advice.
+- **Flags:** CoinMarketCap notices (e.g. shutdowns), wallets listed by more
+  than one exchange, and duplicate wallet rows counted once.
 
 ## Metric
 
@@ -13,9 +35,13 @@ For each token an exchange holds (rows aggregated by CMC `crypto_id`):
 
 - `holding_usd = balance × price`
 - `days_to_sell = holding_usd ÷ volume_24h`
-- `sellable_N = Σ min(holding_usd, N × volume_24h)`, over tokens with volume > 0
-- Tokens with `volume_24h == 0` are reported separately as **no market**.
-- Tokens missing from quotes are reported separately as **unpriced**.
+- `sellable(N) = Σ min(holding_usd, N × volume_24h)`, over tokens with volume > 0
+- Time until a share *f* is sellable: the exact solution of
+  `sellable(d) = f × reported`. `sellable` is piecewise linear with a
+  breakpoint at each holding's `days_to_sell`, so it is solved segment by
+  segment (`sellable/metric.py: days_to_reach`, tested against brute force).
+- Tokens with `volume_24h == 0` are reported separately as **no market**;
+  tokens missing from quotes as **unpriced**. Neither is merged with zero.
 
 This assumes the exchange could sell into all of the world's trading of a
 token, so it is a best case. Reserves are assets only, not solvency.
@@ -29,8 +55,9 @@ token, so it is a best case. Reserves are assets only, not solvency.
 | `GET /v1/exchange/info?id=<ids>` | weekly visits, notices | 10 min |
 | `GET /v3/cryptocurrency/quotes/latest?id=<≤399 ids>` | price, 24h volume, circulating supply | 60 s |
 
-Measured cost: 102 credits per exchange refresh, 4 per quote refresh.
-Visitors never trigger CMC calls; they read the server's latest refresh.
+Measured cost: 102 credits per exchange refresh, 4–5 per quote refresh (the
+v3 endpoint accepts at most 400 ids per call). Visitors never trigger CMC
+calls; they read the server's latest refresh.
 
 ## Run
 
@@ -44,23 +71,53 @@ python3 -m unittest discover -s tests -t .
 
 Then open http://localhost:8000.
 
-Optional: set `LLM_API_KEY` (Groq by default; any OpenAI-compatible endpoint via
-`LLM_BASE_URL` and `LLM_MODELS`, tried in order) to let the Ask panel answer with an LLM grounded
-in the live data. Without it, or when rate limited, the panel uses rule-based
-answers.
+Optional environment variables:
+
+| Variable | Effect |
+|---|---|
+| `LLM_API_KEY` | Ask panel answers with an LLM grounded in the live data. Groq by default; any OpenAI-compatible endpoint via `LLM_BASE_URL`, models tried in order from `LLM_MODELS`. Without it, or when rate limited, answers are rule-based. |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Hourly history. Create the table once with [`docs/supabase_schema.sql`](docs/supabase_schema.sql). The service key stays on the server; the table has row-level security on and no public policies. |
+
+## Tests
+
+- `python3 -m unittest discover -s tests -t .`: metric, cleaning, milestones,
+  LLM fallbacks and rate limits, history rows. Runs on real captured CMC
+  responses in `tests/fixtures/`.
+- `tests/e2e/run.js`: browser checks of every flow, keyboard access, and an
+  axe-core WCAG 2.2 AA audit of each screen in light and dark. Setup and usage
+  are at the top of the file.
+
+## Accessibility
+
+- Zero axe-core violations (WCAG 2.2 AA + best practice) on every screen,
+  light and dark.
+- Keyboard: skip link, every control reachable, dialogs return focus, charts
+  explorable with the arrow keys.
+- Every chart has a table view and a text summary for screen readers.
+- Chart colours are validated for colour-blind separation; identity never
+  relies on colour alone.
+- All motion is disabled under `prefers-reduced-motion`.
 
 ## Deploy (Render)
 
 `render.yaml` defines a free Python web service. Set `CMC_KEY` in the Render
-dashboard (it is never in the repo), and optionally `LLM_API_KEY`. Free services sleep after 15 minutes
-without traffic, so an external cron pings `/api/status` to keep it awake.
-The disk is ephemeral: after a restart the first refresh (~35 s, 106 credits)
-runs before data appears, and the page shows a warm-up screen meanwhile.
+dashboard (never in the repo), and optionally the variables above. Free
+services sleep after 15 minutes without traffic, so an external cron pings
+`/api/status` to keep it awake. The disk is ephemeral: after a restart the
+first refresh (~35 s, ~107 credits) runs before data appears, and the page
+shows a warm-up screen meanwhile.
 
 ## API
 
-`/api/status`, `/api/exchanges`, `/api/exchange/<slug>`,
-`/api/receipt?path=...` (the raw CMC response behind a number).
+| Route | Returns |
+|---|---|
+| `GET /api/status` | refresh times, credits used, coverage |
+| `GET /api/exchanges` | one row per exchange |
+| `GET /api/exchange/<slug>` | full detail: holdings, curve, milestones, receipts |
+| `GET /api/history/<slug>` | hourly history (when Supabase is configured) |
+| `GET /api/receipt?path=...` | the raw CMC response behind a number |
+| `POST /api/ask` | `{question, slug}` → LLM answer or `{fallback: true}` |
+| `GET /e/<slug>` | share link with preview tags for that exchange |
 
 Raw responses are stored gzipped under `data/`. Quotes: every refresh for the
 last hour, then one per hour.

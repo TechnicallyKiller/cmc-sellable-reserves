@@ -105,6 +105,7 @@ function syncUrl() {
 async function navigate() {
   const r = route();
   applyParams(r.params);
+  if ($('#receipt').open) $('#receipt').close(); // e.g. Back pressed while a receipt is open
   if (r.screen === 'exchange' && ready() && !state.details[r.slug]) {
     try { await loadDetail(r.slug); } catch (_) { /* rendered as not found */ }
   }

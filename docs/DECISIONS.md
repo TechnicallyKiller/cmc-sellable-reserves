@@ -342,3 +342,74 @@ with a touch of maximalism. Design brief: `design_prompt.md`.
 
 **Would be wrong if.** CMC documents that case-variant rows are distinct
 holdings. Nothing observed suggests so.
+
+---
+
+## D9 — Charts: liquidity curve, compare scatter, history (decided 2026-09-25)
+
+**What.**
+- Exchange page: share sellable against days (log axis, 1–365), with exact
+  milestones for 50% and 90% and a ceiling line when no-market tokens cap it.
+- Compare page: reported reserves (log $) against sellable share at the
+  chosen horizon; bubble area ∝ weekly visits; direct labels on exchanges over
+  $100M with less than half sellable, plus the three largest.
+- History sparkline when D10 is enabled.
+
+**Why these, and not others.** Each answers a question the numbers alone
+don't: "how long until half of it could be sold?" and "which big, busy
+exchanges are illiquid?". A holdings pie was rejected: the reserve bar already
+shows part-to-whole.
+
+**Precision.** Milestones are solved exactly (piecewise-linear, see README);
+the curve's tooltip recomputes the exact share for the hovered day from the
+holdings rather than interpolating the 60 plotted points. Tested: the solver
+agrees with brute force to 1e-9 and a hair earlier falls short.
+
+**Colour (dataviz validator, 2026-09-25).** The brand green #3B7A57 fails the
+chart chroma floor (0.086 < 0.1). Green vs pink fails colour-blind separation
+in every tested variant (deutan ΔE 3.9–5.9). So each chart is one series in
+a validated green (light #16875A, dark #44A873; all checks pass), and special
+marks (ceiling, flagged bubbles) are distinguished by labels and an ink
+outline, never by hue.
+
+**Would be wrong if.** Users read the log x-axis as linear. Mitigation: axis
+labels in words (1 day, 1 week, 1 month, 3 months, 1 year) and table views.
+
+---
+
+## D10 — History in Supabase, not in git (decided by user 2026-09-25)
+
+**What.** One row per exchange per clock hour in a Supabase Postgres table
+(`docs/supabase_schema.sql`), written by the server with the service-role
+key; read through `/api/history/<slug>` (cached 5 min). Optional: without
+`SUPABASE_URL` / `SUPABASE_SERVICE_KEY` the chart is hidden.
+
+**Alternatives.** Daily commits of snapshots to the repo: no extra service,
+but coarse (daily), noisy history, and a deploy per write. Render's disk:
+wiped on restart (D5).
+
+**Evidence.** Supabase billing docs (2026-09-25): free plan 500 MB per
+project, two free projects; free projects can be paused (inactivity rules not
+stated on that page). Volume: 44 exchanges × 24 rows/day ≈ 1,056 rows/day.
+
+**Security.** RLS enabled with no policies, so the public anon key cannot
+read or write; the service key never leaves the server.
+
+**Would be wrong if.** Supabase pauses the project despite hourly writes.
+Unverified; check the project dashboard after a few days.
+
+---
+
+## D11 — Accessibility as a tested requirement (decided 2026-09-25)
+
+**What.** `tests/e2e/run.js` runs axe-core (WCAG 2.2 AA + best practice) on
+every screen in light and dark, plus keyboard checks (skip link, focus return,
+chart keyboard exploration).
+
+**Evidence.** First audit: one violation type, `color-contrast` (brand green
+text 4.34:1 on the page background; 56 nodes on Compare). Fixed with a
+text-only green #326D4C (5.2:1; 4.75:1 on hover backgrounds). Re-audit: 0
+violations across 16 screen states.
+
+**Would be wrong if.** Screen-reader users find the chart summaries
+insufficient. Each chart also has a table view with every plotted value.
