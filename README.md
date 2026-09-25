@@ -45,7 +45,7 @@ python3 -m unittest discover -s tests -t .
 Then open http://localhost:8000.
 
 Optional: set `LLM_API_KEY` (Groq by default; any OpenAI-compatible endpoint via
-`LLM_BASE_URL` and `LLM_MODEL`) to let the Ask panel answer with an LLM grounded
+`LLM_BASE_URL` and `LLM_MODELS`, tried in order) to let the Ask panel answer with an LLM grounded
 in the live data. Without it, or when rate limited, the panel uses rule-based
 answers.
 

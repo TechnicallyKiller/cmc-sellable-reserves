@@ -268,7 +268,8 @@ rules over the live data (in `web/app.js`): exchange summaries, "why not 100%",
 token lookups, notices, method questions, and a fixed refusal for buy/sell/move
 questions. Every answer cites a receipt. There is **no LLM yet**.
 
-**LLM (decided 2026-09-25): Groq free tier, `openai/gpt-oss-120b`**, via its
+**LLM (decided 2026-09-25): Groq free tier, `openai/gpt-oss-120b` then
+`openai/gpt-oss-20b`**, via its
 OpenAI-compatible endpoint `https://api.groq.com/openai/v1`, from `POST /api/ask`
 on the same server. Key in `LLM_API_KEY` (user-supplied, never in the repo).
 - Evidence (Groq rate-limits page, 2026-09-25): free plan 30 RPM, 1K RPD,
@@ -287,10 +288,24 @@ on the same server. Key in `LLM_API_KEY` (user-supplied, never in the repo).
   reply → the panel answers with the rule-based answers and, when rate
   limited, says so.
 
-**Would be wrong if.** The 8K tokens/minute cap makes most questions fall back.
-Measured prompt size: system 1,281 chars + data up to ~5.8K chars, plus up to
-700 completion tokens; token counts are not yet measured. Check Groq's `usage`
-field once the key is set.
+- Model chain: Groq's free-tier limits are per model, so a 429 on 120b retries
+  on 20b before falling back to rules. Chat models available to the key
+  (`evidence/groq_models_2026-09-25.json`): gpt-oss-120b, gpt-oss-20b,
+  qwen3.8-27b; all free with the same free-plan limits.
+- Groq's Cloudflare front returns 403 "error code: 1010" to Python's default
+  urllib User-Agent; requests send an explicit User-Agent.
+- Context is pre-rounded and dollar-labelled (`volume_24h_usd`, `*_pct`): with
+  the raw fields the model read a $186K volume as "186,562 units" and quoted
+  raw decimals.
+- Measured (Groq `usage`, 11 test questions, 2026-09-25): 1,000–2,700 total
+  tokens per answer; ~800–1,200 prompt tokens on an exchange page, ~2,400
+  with the all-exchanges list. Under 8K TPM that is ~3–6 answers per minute
+  per model.
+
+**Would be wrong if.** Answers state numbers that differ from the data.
+Observed: rounding drift (e.g. "several thousand days" for 2,177 days). The
+panel labels these "AI answer", and the page numbers and receipts remain the
+source of truth.
 
 **Visual direction (user, 2026-09-25).** Interactive site, soft neumorphism
 with a touch of maximalism. Design brief: `design_prompt.md`.
