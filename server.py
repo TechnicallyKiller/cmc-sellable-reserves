@@ -8,10 +8,13 @@ API:
   GET /api/exchanges
   GET /api/exchange/<slug>
   GET /api/receipt?path=<kind/ts/name.json>   raw CMC response behind a number
+  GET /api/history/<slug>                     hourly sellable shares (Supabase), if enabled
   POST /api/ask {question, slug}              LLM answer, or {"fallback": true}
+  GET /e/<slug>                               share link: preview tags, then the exchange page
 Static files are served from ./web if it exists.
 """
 import argparse
+import html
 import json
 import logging
 import os
@@ -21,13 +24,36 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 from sellable.ask import MODELS, Asker
 from sellable.cmc import Client
+from sellable.history import History
+from sellable.metric import money_label, pct_label
 from sellable.live import Live, dumps
 from sellable.store import Store
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def make_handler(live: Live, asker: Asker):
+SITE_DESC = ("Of the reserves your crypto exchange shows you, how much could actually be sold "
+             "within a week? Live data from the CoinMarketCap API.")
+
+
+def page_with_meta(title, desc, url, image):
+    """index.html with Open Graph / Twitter card tags filled in."""
+    with open(os.path.join(HERE, "web", "index.html"), encoding="utf-8") as f:
+        page = f.read()
+    e = html.escape
+    tags = (f'<meta property="og:type" content="website">\n'
+            f'<meta property="og:title" content="{e(title)}">\n'
+            f'<meta property="og:description" content="{e(desc)}">\n'
+            f'<meta property="og:url" content="{e(url)}">\n'
+            f'<meta property="og:image" content="{e(image)}">\n'
+            f'<meta name="twitter:card" content="summary_large_image">\n'
+            f'<meta name="twitter:title" content="{e(title)}">\n'
+            f'<meta name="twitter:description" content="{e(desc)}">\n'
+            f'<meta name="twitter:image" content="{e(image)}">\n')
+    return page.replace("</head>", tags + "</head>", 1)
+
+
+def make_handler(live: Live, asker: Asker, history: History):
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *a, **kw):
             super().__init__(*a, directory=os.path.join(HERE, "web"), **kw)
@@ -41,8 +67,38 @@ def make_handler(live: Live, asker: Asker):
             self.end_headers()
             self.wfile.write(body)
 
+        def _origin(self):
+            proto = self.headers.get("X-Forwarded-Proto", "http")
+            return f"{proto}://{self.headers.get('Host', 'localhost')}"
+
+        def _html(self, body):
+            data = body.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
         def do_GET(self):
             url = urllib.parse.urlparse(self.path)
+            origin = self._origin()
+            if url.path in ("/", "/index.html"):
+                return self._html(page_with_meta("Sellable Reserves", SITE_DESC, origin + "/", origin + "/og.png"))
+            if url.path.startswith("/e/"):
+                slug = url.path[3:].strip("/")
+                ex = live.view["by_slug"].get(slug)
+                if not ex:
+                    return self._html(page_with_meta("Sellable Reserves", SITE_DESC, origin + "/", origin + "/og.png"))
+                if ex.get("has_data"):
+                    title = (f"{ex['name']}: {pct_label(ex['sellable_share'][7])} of {money_label(ex['reported_usd'])} "
+                             f"in reserves could be sold within a week")
+                    desc = ex["sentences"][7]
+                else:
+                    title, desc = f"{ex['name']} publishes no reserves", ex["sentence"]
+                page = page_with_meta(title, desc, f"{origin}/e/{slug}", origin + "/og.png")
+                # Humans land on the exchange page; crawlers read the tags above.
+                page = page.replace("<script>", f"<script>if(!location.hash)history.replaceState(null,'','/#/exchange/{slug}');</script>\n<script>", 1)
+                return self._html(page)
             if not url.path.startswith("/api/"):
                 return super().do_GET()
             view = live.view
@@ -61,6 +117,12 @@ def make_handler(live: Live, asker: Asker):
                 slug = url.path.rsplit("/", 1)[-1]
                 ex = view["by_slug"].get(slug)
                 return self._json(200, ex) if ex else self._json(404, {"error": f"unknown exchange '{slug}'"})
+            if url.path.startswith("/api/history/"):
+                slug = url.path.rsplit("/", 1)[-1]
+                if not history.enabled:
+                    return self._json(200, {"enabled": False, "points": []})
+                pts = history.series(slug)
+                return self._json(200, {"enabled": True, "points": pts or []})
             if url.path == "/api/receipt":
                 path = urllib.parse.parse_qs(url.query).get("path", [""])[0]
                 try:
@@ -104,17 +166,19 @@ def main():
 
     store = Store(args.data)
     stop = threading.Event()
+    history = History()
+    logging.info("history: %s", "enabled (Supabase)" if history.enabled else "disabled (no SUPABASE_URL / SUPABASE_SERVICE_KEY)")
     if args.replay:
         live = Live(store)
         live.load_latest_from_store()
         live.build_view()
     else:
-        live = Live(store, Client(os.environ.get("CMC_KEY")))
+        live = Live(store, Client(os.environ.get("CMC_KEY")), history)
         threading.Thread(target=live.run_forever, args=(stop,), daemon=True).start()
 
     asker = Asker()
     logging.info("ask panel LLM: %s", f"enabled ({', '.join(MODELS)})" if asker.enabled else "disabled (no LLM_API_KEY), rule-based answers only")
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(live, asker))
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(live, asker, history))
     logging.info("serving on http://localhost:%d (%s)", args.port, "replay" if args.replay else "live")
     try:
         server.serve_forever()

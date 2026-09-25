@@ -16,9 +16,10 @@ EXCHANGES_EVERY_S = 600
 
 
 class Live:
-    def __init__(self, store: Store, client=None):
+    def __init__(self, store: Store, client=None, history=None):
         self.store = store
         self.client = client
+        self.history = history
         self._lock = threading.Lock()
         self.exchanges = []        # [{id, name, slug}] from exchange/map, volume order
         self.assets = {}           # id -> cleaned rows
@@ -164,12 +165,16 @@ class Live:
                 "sellable_share": res["sellable_share"],
                 "no_market_share": res["no_market_share"],
                 "top_symbol": res["holdings"][0]["symbol"] if res["holdings"] else None,
+                "days_to_half": res["days_to_share"]["50"],
             }
             summary.append(row)
             by_slug[e["slug"]] = {
                 **row,
                 "sentences": {n: metric.sentence(e["name"], res, n) for n in metric.HORIZONS},
                 "sellable_usd": res["sellable_usd"],
+                "curve": res["curve"],
+                "ceiling_share": res["ceiling_share"],
+                "days_to_share": res["days_to_share"],
                 "no_market_usd": res["no_market_usd"],
                 "holdings": res["holdings"],
                 "unpriced": res["unpriced"],
@@ -218,7 +223,9 @@ class Live:
                 if time.monotonic() >= next_q:
                     self.refresh_quotes()
                     next_q = time.monotonic() + QUOTES_EVERY_S
-                self.build_view()
+                view = self.build_view()
+                if self.history:
+                    self.history.record(view)
             except (cmc.CMCError, OSError, ValueError, KeyError) as err:
                 log.error("refresh failed: %s", err)
             stop.wait(max(1.0, min(next_ex, next_q) - time.monotonic()))

@@ -14,6 +14,7 @@
   --ease-spring:cubic-bezier(.34,1.56,.64,1);
   --display:'Bricolage Grotesque',sans-serif;
   --mono:'JetBrains Mono',monospace;
+  --chart:#16875A;--grid:rgba(31,29,24,.10);
   color-scheme:light;
   interpolate-size:allow-keywords;
 }
@@ -21,6 +22,7 @@
   --bg:#25241F;--ink:#F3ECDA;--mut:#B3AB98;--calm:#6DBE8F;--calmInk:#0F2419;--acc:#FF3D82;--accText:#FF7AA8;--accInk:#1F0610;
   --bigBg:repeating-linear-gradient(135deg,#6B707A 0 6px,#777C86 6px 12px);
   --sl:rgba(255,255,255,.06);--sd:rgba(0,0,0,.55);--hover:rgba(255,255,255,.05);--scrim:rgba(0,0,0,.6);
+  --chart:#44A873;--grid:rgba(243,236,218,.10);
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -339,6 +341,49 @@ main:focus,h1[tabindex="-1"]:focus{outline:none}
 .receipt-files a{font-family:var(--mono);font-size:12.5px;padding:8px 12px;border-radius:12px;box-shadow:var(--raise-sm);text-decoration:none;color:var(--ink);transition:transform .18s}
 .receipt-files a:hover{transform:translateY(-1px)}
 .receipt-note{margin:0;font-size:14.5px;line-height:1.5;color:var(--mut);text-wrap:pretty}
+
+/* ---------- charts ---------- */
+/* --chart is validated per theme (dataviz validator: light #16875A, dark #44A873).
+   The brand green #3B7A57 fails the chart chroma floor, so charts use their own token. */
+.chart-card{gap:18px}
+.chart-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:14px 24px}
+.chart-sub{margin:6px 0 0;font-size:15.5px;color:var(--mut);line-height:1.45;max-width:46em;text-wrap:pretty}
+.chart-note{margin:0;font-size:14.5px;color:var(--mut);line-height:1.45}
+.chart{position:relative;width:100%;border-radius:22px;box-shadow:var(--inset-sm);padding:10px 8px 4px}
+.chart-svg{display:block;overflow:visible;border-radius:16px}
+.chart-svg:focus-visible{outline:2.5px solid var(--chart);outline-offset:4px}
+.chart-svg .grid{stroke:var(--grid);stroke-width:1}
+.chart-svg .tick{fill:var(--mut);font-size:12px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.chart-svg .label{fill:var(--ink);font-size:13px;font-weight:700}
+.chart-svg .note{fill:var(--mut);font-size:12.5px;font-weight:600}
+.chart-svg .line{fill:none;stroke:var(--chart);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.chart-svg .area{fill:var(--chart);opacity:.1}
+.chart-svg .ceiling{stroke:var(--mut);stroke-width:1}
+.chart-svg .dot{fill:var(--chart);stroke:var(--bg);stroke-width:2}
+.chart-svg .marker-line{stroke:var(--ink);stroke-width:1;opacity:.35}
+.chart-svg .marker circle,.chart-svg .marker .dot{transition:cx .5s var(--ease-out),cy .5s var(--ease-out)}
+.chart-svg .marker-line{transition:x1 .5s var(--ease-out),x2 .5s var(--ease-out)}
+.chart-svg .cross{stroke:var(--ink);stroke-width:1;opacity:.5}
+.chart-svg .bubble{fill:var(--chart);fill-opacity:.55;stroke:var(--bg);stroke-width:2;transform-box:fill-box;transform-origin:center;animation:bubbleIn .5s var(--ease-spring) both}
+.chart-svg .bubble.flag{fill-opacity:.85;stroke:var(--ink);stroke-width:1.5}
+.chart-svg .hover-ring{fill:none;stroke:var(--ink);stroke-width:1.5}
+.chart-tip{position:absolute;z-index:5;pointer-events:none;background:var(--bg);border-radius:14px;box-shadow:var(--raise-sm);padding:8px 12px;display:flex;flex-direction:column;gap:2px;white-space:nowrap;font-size:13px}
+.chart-tip b{font-size:15px}
+.chart-tip span{color:var(--mut)}
+.chart-table summary{cursor:pointer;font-size:14.5px;font-weight:600;color:var(--mut);width:fit-content}
+.chart-table summary:hover{color:var(--ink)}
+.chart-table table{margin-top:12px;border-collapse:collapse;font-size:14.5px;min-width:min(100%,420px)}
+.chart-table th,.chart-table td{padding:8px 14px 8px 0;text-align:left;border-bottom:1px solid var(--hover);font-variant-numeric:tabular-nums}
+.chart-table thead th{color:var(--mut);font-weight:600;font-size:13px;letter-spacing:.04em;text-transform:uppercase}
+@keyframes bubbleIn{from{transform:scale(0);opacity:0}to{transform:none;opacity:1}}
+
+/* ---------- a11y helpers ---------- */
+.skip{position:fixed;left:16px;top:-60px;z-index:1000;background:var(--calm);color:var(--calmInk);padding:10px 16px;border-radius:12px;font-weight:700;text-decoration:none;transition:top .2s}
+.skip:focus{top:12px}
+.toast{position:fixed;left:50%;bottom:clamp(80px,12vh,110px);transform:translateX(-50%);z-index:70;background:var(--bg);box-shadow:var(--raise-lg);border-radius:16px;padding:12px 18px;font-size:15px;font-weight:600;max-width:calc(100vw - 32px);
+  transition:opacity .25s,transform .35s var(--ease-spring),display .35s;transition-behavior:allow-discrete}
+.toast[hidden]{opacity:0;transform:translate(-50%,12px)}
+@starting-style{.toast{opacity:0;transform:translate(-50%,12px)}}
 
 /* ---------- entry animations ---------- */
 .stagger>*{animation:rise .6s var(--ease-out) both;animation-delay:calc(min(var(--i,0),14) * 55ms)}

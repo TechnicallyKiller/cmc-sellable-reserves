@@ -78,15 +78,33 @@ const shares = (d, hz) => {
 
 /* ---------------- routing & transitions ---------------- */
 function route() {
-  const h = location.hash.replace(/^#/, '');
+  const [h, qs] = location.hash.replace(/^#/, '').split('?');
+  const params = new URLSearchParams(qs || '');
   const m = h.match(/^\/exchange\/([^/?]+)/);
-  if (m) return { screen: 'exchange', slug: decodeURIComponent(m[1]) };
-  if (h.startsWith('/compare')) return { screen: 'compare' };
-  return { screen: 'home' };
+  if (m) return { screen: 'exchange', slug: decodeURIComponent(m[1]), params };
+  if (h.startsWith('/compare')) return { screen: 'compare', params };
+  return { screen: 'home', params };
+}
+
+// Settings live in the URL so a link reproduces the view (defaults omitted).
+function applyParams(p) {
+  if ([1, 7, 30].includes(+p.get('hz'))) state.hz = +p.get('hz');
+  if (['pct', 'size', 'visits', 'name'].includes(p.get('sort'))) state.sort = p.get('sort');
+  if (['all', 'nm', 'low', 'notice'].includes(p.get('filter'))) state.filter = p.get('filter');
+}
+function syncUrl() {
+  const r = route();
+  const p = new URLSearchParams();
+  if (state.hz !== 7) p.set('hz', state.hz);
+  if (r.screen === 'compare') { if (state.sort !== 'pct') p.set('sort', state.sort); if (state.filter !== 'all') p.set('filter', state.filter); }
+  const base = r.screen === 'exchange' ? `#/exchange/${encodeURIComponent(r.slug)}` : r.screen === 'compare' ? '#/compare' : '#/';
+  const next = base + (p.toString() ? '?' + p : '');
+  if (location.hash !== next) history.replaceState(null, '', next);
 }
 
 async function navigate() {
   const r = route();
+  applyParams(r.params);
   if (r.screen === 'exchange' && ready() && !state.details[r.slug]) {
     try { await loadDetail(r.slug); } catch (_) { /* rendered as not found */ }
   }
@@ -201,6 +219,7 @@ function exchangeHTML(d) {
         <button type="button" class="stat" data-rc="total"><span class="k">Reported</span><span class="v">${money(d.reported_usd)}</span></button>
         <button type="button" class="stat" data-rc="visits"><span class="k">Weekly visits</span><span class="v"${d.weekly_visits == null ? ' style="color:var(--mut)"' : ''}>${visitsLabel(d.weekly_visits)}</span></button>
         <div class="stat inset"><span class="k">Prices as of</span><span class="v mono" data-bind="quotesAt">${fmtTime(state.list.quotes_fetched_at).slice(11, 16)} UTC</span></div>
+        <button type="button" class="stat" data-share><span class="k">Share</span><span class="v">Copy link ↗</span></button>
       </div>
     </div>
     <p class="sentence" style="--i:${notices.length + 1}" data-bind="sentence">${esc(d.sentences[hz])}</p>
@@ -226,6 +245,8 @@ function exchangeHTML(d) {
         </div>
       </section>
     </div>
+    ${curveHTML(d, notices.length + 3)}
+    <section class="card chart-card" id="history-card" hidden style="--i:${notices.length + 3}"></section>
     <section style="display:flex;flex-direction:column;gap:18px;--i:${notices.length + 3}">
       <div class="sec-head">
         <h2 class="h2">What it holds</h2>
@@ -236,6 +257,73 @@ function exchangeHTML(d) {
     </section>
     ${howHTML(notices.length + 4)}
   </section>`;
+}
+
+const milestoneLabel = v => v == null ? 'Never' : daysLabel(v);
+const exactShare = d => {
+  const liq = d.holdings.filter(h => h.volume_24h > 0);
+  return days => liq.reduce((a, h) => a + Math.min(h.usd, days * h.volume_24h), 0) / d.reported_usd;
+};
+
+function curveHTML(d, i) {
+  const half = d.days_to_share['50'], ninety = d.days_to_share['90'];
+  const at = exactShare(d);
+  const rows = [1, 7, 30, 90, 180, 365].map(n => `<tr><th scope="row">${n === 1 ? '1 day' : n + ' days'}</th><td>${pctLabel(at(n))}%</td><td>${money(at(n) * d.reported_usd)}</td></tr>`).join('');
+  const cap = d.ceiling_share < 0.01 ? 'stays below 1%' : `can never rise above ${pctLabel(d.ceiling_share)}%`;
+  const blocked = d.ceiling_share < 0.995 ? `<p class="chart-note">${pctLabel(1 - d.ceiling_share)}% is in tokens with no trading at all, so the curve ${cap}, however long you wait.</p>` : '';
+  return `<section class="card chart-card" style="--i:${i}">
+    <div class="chart-head">
+      <div><h2 class="h2" style="font-size:clamp(24px,2.6vw,32px)">How fast could it sell?</h2>
+        <p class="chart-sub">Share of the ${money(d.reported_usd)} that could be sold within a given time. Hover the chart, or focus it and use the arrow keys.</p></div>
+      <div class="stat-chips">
+        <div class="stat inset"><span class="k">Half sellable in</span><span class="v">${milestoneLabel(half)}</span></div>
+        <div class="stat inset"><span class="k">90% sellable in</span><span class="v">${milestoneLabel(ninety)}</span></div>
+      </div>
+    </div>
+    <div class="chart" id="curve"></div>
+    ${blocked}
+    <details class="chart-table"><summary>Show as table</summary>
+      <table><caption class="sr-only">Share of ${esc(d.name)}'s reported reserves sellable within each time</caption>
+      <thead><tr><th scope="col">Within</th><th scope="col">Sellable</th><th scope="col">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+    </details>
+  </section>`;
+}
+
+let curveApi = null;
+function drawCurve(d) {
+  const host = $('#curve'); if (!host) return;
+  const at = exactShare(d);
+  const ms = [['50', 0.5], ['90', 0.9]].map(([k, f]) => ({ days: d.days_to_share[k], share: f, label: `${k}% in ${milestoneLabel(d.days_to_share[k]).toLowerCase()}` }));
+  Charts.responsive(host, () => {
+    curveApi = Charts.curve(host, {
+      points: d.curve, ceiling: d.ceiling_share, milestones: ms, marker: state.hz, exactAt: at,
+      ceilingLabel: d.ceiling_share < 0.01 ? 'Ceiling under 1%: the rest has no market' : `Ceiling ${pctLabel(d.ceiling_share)}%: the rest has no market`,
+      fmtValue: (days, share) => [`${pctLabel(share)}% · ${money(share * d.reported_usd)}`, `sellable within ${daysLabel(days).toLowerCase()}`],
+      aria: `Liquidity curve for ${d.name}: ${pctLabel(at(1))}% sellable within 1 day, ${pctLabel(at(7))}% within 7 days, ${pctLabel(at(30))}% within 30 days, ${pctLabel(at(365))}% within a year. Half sellable in ${milestoneLabel(d.days_to_share['50']).toLowerCase()}.`,
+    });
+  });
+}
+
+async function drawHistory(d) {
+  const card = $('#history-card'); if (!card) return;
+  let h;
+  try { h = await api('/api/history/' + encodeURIComponent(d.slug)); } catch (_) { return; }
+  if (!h.enabled || !$('#history-card')) return;
+  const pts = h.points.map(p => ({ t: new Date(p.fetched_at), v: p['sellable_' + state.hz + 'd'], raw: p }));
+  card.hidden = false;
+  const head = `<h2 class="h2" style="font-size:clamp(22px,2.4vw,28px)">Sellable within ${HZ[state.hz].short}, over time</h2>`;
+  if (pts.length < 2) {
+    card.innerHTML = head + `<p class="chart-sub">Hourly history started ${pts.length ? 'at ' + esc(pts[0].t.toISOString().slice(0, 16).replace('T', ' ')) + ' UTC' : 'recently'}. The chart appears once there are two readings.</p>`;
+    return;
+  }
+  card.innerHTML = head + `<p class="chart-sub">One reading per hour, last 30 days.</p><div class="chart" id="spark"></div>
+    <details class="chart-table"><summary>Show as table</summary><table><thead><tr><th scope="col">Time (UTC)</th><th scope="col">Sellable</th><th scope="col">Reported</th></tr></thead>
+    <tbody>${pts.slice(-48).reverse().map(p => `<tr><td>${esc(p.t.toISOString().slice(0, 16).replace('T', ' '))}</td><td>${pctLabel(p.v)}%</td><td>${money(p.raw.reported_usd)}</td></tr>`).join('')}</tbody></table></details>`;
+  const fmtT = t => t.toISOString().slice(5, 16).replace('T', ' ');
+  Charts.responsive($('#spark'), () => Charts.spark($('#spark'), {
+    points: pts, fmtT, fmt: p => [`${pctLabel(p.v)}%`, `${fmtT(p.t)} UTC · ${money(p.raw.reported_usd)} reported`],
+    aria: `Sellable within ${HZ[state.hz].short} for ${d.name} over the last ${pts.length} hourly readings, from ${pctLabel(pts[0].v)}% to ${pctLabel(pts[pts.length - 1].v)}%.`,
+  }));
 }
 
 const bigUsd = (d, hz) => Math.max(0, d.reported_usd - d.sellable_usd[hz] - d.no_market_usd);
@@ -339,6 +427,13 @@ function compareHTML() {
         <div class="filters">${[['all', `All ${c.with_data}`], ['nm', 'Has no-market tokens'], ['low', 'Under half sellable'], ['notice', 'Has a notice']].map(([v, l]) =>
           `<button type="button" class="pill" data-filter="${v}" aria-pressed="${state.filter === v}">${l}</button>`).join('')}</div></div>
     </div>
+    <section class="card chart-card">
+      <div class="chart-head"><div>
+        <h2 class="h2" style="font-size:clamp(24px,2.6vw,32px)">Size against sellable</h2>
+        <p class="chart-sub">Each bubble is an exchange: reported reserves across, share sellable within <span data-bind="hzShort2">${HZ[state.hz].short}</span> up, bubble size = weekly visits. Labelled: over $100M with less than half sellable, plus the three largest. Every value is also in the list below.</p>
+      </div></div>
+      <div class="chart" id="scatter"></div>
+    </section>
     <div class="rows stagger" id="rows">${rowsHTML()}</div>
     <p class="cmp-note">Sellable = each holding capped at days × that token's global daily trading, summed. A best case.
       <span class="keys"><span><i style="background:var(--calm)"></i>Sellable</span><span><i style="background:var(--bigBg)"></i>Too large</span><span><i style="background:var(--acc)"></i>No market</span></span></p>
@@ -346,12 +441,34 @@ function compareHTML() {
   </section>`;
 }
 
-function rowsHTML() {
+function filteredRows() {
   const hz = state.hz;
   let rows = withData().map(x => ({ x, s: x.sellable_share[hz] ?? 0, n: x.no_market_share ?? 0 }));
   if (state.filter === 'nm') rows = rows.filter(r => r.n > 0);
   if (state.filter === 'low') rows = rows.filter(r => r.s < 0.5);
   if (state.filter === 'notice') rows = rows.filter(r => r.x.notice);
+  return rows;
+}
+
+function drawScatter() {
+  const host = $('#scatter'); if (!host) return;
+  const rows = filteredRows();
+  if (!rows.length) { host.querySelector('svg')?.remove(); return; }
+  const big3 = new Set([...rows].sort((a, b) => b.x.reported_usd - a.x.reported_usd).slice(0, 3).map(r => r.x.slug));
+  const pts = rows.map(r => {
+    const flag = r.x.reported_usd >= 1e8 && r.s < 0.5;
+    return { id: r.x.slug, x: r.x.reported_usd, y: r.s, visits: r.x.weekly_visits, flag, label: flag || big3.has(r.x.slug) ? r.x.name : '', row: r };
+  });
+  Charts.responsive(host, () => Charts.scatter(host, {
+    points: pts, onPick: slug => { location.hash = '#/exchange/' + slug; },
+    fmtAxis: v => money(v),
+    fmt: p => [`${p.row.x.name} · ${pctLabel(p.y)}% sellable`, `${money(p.x)} reported · ${visitsLabel(p.visits)} weekly visits`],
+    aria: `Scatter of ${pts.length} exchanges: reported reserves against share sellable within ${HZ[state.hz].short}. Below half sellable with over $100M: ${pts.filter(p => p.flag).map(p => p.row.x.name).join(', ') || 'none'}.`,
+  }));
+}
+
+function rowsHTML() {
+  let rows = filteredRows();
   const by = {
     pct: (a, b) => b.s - a.s || b.x.reported_usd - a.x.reported_usd,
     size: (a, b) => b.x.reported_usd - a.x.reported_usd,
@@ -439,8 +556,9 @@ function bindView(r) {
   if (r.screen === 'home' && ready()) bindSearch();
   if (r.screen === 'exchange') {
     const d = state.details[r.slug];
-    if (d && d.has_data) paintExchangeNumbers(d);
+    if (d && d.has_data) { paintExchangeNumbers(d); drawCurve(d); drawHistory(d); }
   }
+  if (r.screen === 'compare') drawScatter();
 }
 
 // Delegated handlers on the view (survive re-renders).
@@ -453,12 +571,18 @@ $('#view').addEventListener('click', ev => {
   if (t.dataset.rc) { ev.stopPropagation(); openReceipt(t.dataset.rc, t.dataset.slug || (d && d.slug), t, t.dataset.token); return; }
   if (t.dataset.hz) {
     state.hz = +t.dataset.hz;
-    if (d) paintExchangeNumbers(d, { swapSentence: true });
-    if (r.screen === 'compare') { $$('[data-hz]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.hz === state.hz))); $('[data-bind="hzShort"]').textContent = HZ[state.hz].short; refreshRows(); }
+    syncUrl();
+    if (d) { paintExchangeNumbers(d, { swapSentence: true }); curveApi?.setMarker(state.hz); drawHistory(d); }
+    if (r.screen === 'compare') {
+      $$('[data-hz]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.hz === state.hz)));
+      $('[data-bind="hzShort"]').textContent = HZ[state.hz].short; $('[data-bind="hzShort2"]').textContent = HZ[state.hz].short;
+      refreshRows();
+    }
     return;
   }
-  if (t.dataset.sort) { state.sort = t.dataset.sort; $$('[data-sort]').forEach(b => b.setAttribute('aria-pressed', String(b === t))); refreshRows(); return; }
-  if (t.dataset.filter) { state.filter = t.dataset.filter; $$('[data-filter]').forEach(b => b.setAttribute('aria-pressed', String(b === t))); refreshRows(); return; }
+  if (t.dataset.sort) { state.sort = t.dataset.sort; syncUrl(); $$('[data-sort]').forEach(b => b.setAttribute('aria-pressed', String(b === t))); refreshRows(); return; }
+  if (t.dataset.filter) { state.filter = t.dataset.filter; syncUrl(); $$('[data-filter]').forEach(b => b.setAttribute('aria-pressed', String(b === t))); refreshRows(); return; }
+  if (t.hasAttribute('data-share') && d) { shareExchange(d); return; }
   if (t.classList.contains('row')) { goExchange(t); return; }
   if (t.classList.contains('hold-btn')) { toggleHold(t.closest('.hold')); return; }
   if (t.id === 'more-holds' && d) { state.holdsShown = d.holdings.length; $('#holds').innerHTML = holdsHTML(d, true); growBars($('#holds')); return; }
@@ -475,11 +599,12 @@ function goExchange(row) {
   const name = $('.rname', row);
   $$('.rname').forEach(n => { n.style.viewTransitionName = ''; });
   name.style.viewTransitionName = 'ex-name';
-  location.hash = '#/exchange/' + row.dataset.slug;
+  location.hash = '#/exchange/' + row.dataset.slug + (state.hz !== 7 ? '?hz=' + state.hz : '');
 }
 
 function refreshRows() {
   const rows = $('#rows');
+  drawScatter();
   rows.innerHTML = rowsHTML();
   $$('.rname', rows).forEach(n => { n.style.viewTransitionName = ''; });
   growBars(rows);
@@ -493,6 +618,22 @@ function toggleHold(card) {
   const btn = $('.hold-btn', card);
   btn.setAttribute('aria-expanded', String(open));
   $('.hold-more', card).lastChild.textContent = open ? 'Hide details' : 'Wallets, balance, volume';
+}
+
+async function shareExchange(d) {
+  const url = `${location.origin}/e/${encodeURIComponent(d.slug)}`;
+  const title = `${d.name}: ${pctLabel(d.sellable_share[7])}% of ${money(d.reported_usd)} sellable within a week`;
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try { await navigator.share({ title, text: d.sentences[7], url }); return; } catch (_) { /* cancelled: fall through to copy */ }
+  }
+  try { await navigator.clipboard.writeText(url); toast('Link copied. It shows this exchange\'s numbers when posted.'); }
+  catch (_) { toast('Copy this link: ' + url); }
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
 }
 
 /* ---------------- search combobox ---------------- */
@@ -784,6 +925,7 @@ async function poll() {
       paintExchangeNumbers(d);
       $('[data-bind="big"]')?.classList.remove('tick'); void $('[data-bind="big"]')?.offsetWidth; $('[data-bind="big"]')?.classList.add('tick');
       const holds = $('#holds'); if (holds) { holds.innerHTML = holdsHTML(d, false); $$('[data-w]', holds).forEach(e => { e.style.width = e.dataset.w + '%'; }); }
+      drawCurve(d);
     }
   } else if (r.screen === 'compare') {
     refreshRows();
@@ -792,6 +934,8 @@ async function poll() {
 }
 
 window.addEventListener('hashchange', navigate);
+// The skip link targets #view; handle it here so the hash router doesn't treat it as a page.
+$('.skip').addEventListener('click', ev => { ev.preventDefault(); $('#view').focus(); });
 (async function start() {
   try { await loadList(); } catch (_) { /* server unreachable: warm screen, keep polling */ }
   await navigate();

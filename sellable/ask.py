@@ -13,6 +13,8 @@ import urllib.error
 import urllib.request
 from collections import defaultdict, deque
 
+from . import metric
+
 BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.groq.com/openai/v1")
 # Tried in order; Groq's free-tier limits are per model, so the second model
 # adds capacity when the first returns 429.
@@ -29,21 +31,20 @@ TOP_HOLDINGS = 10
 
 SYSTEM = """You answer questions on "Sellable Reserves", a site that checks crypto exchanges' proof-of-reserves using live CoinMarketCap data.
 
-Fields in DATA (all money is US dollars, all *_pct are percentages 0-100):
-- reported_usd: sum of balance x latest price for every wallet CoinMarketCap lists for the exchange (wallets over $500k only; balances have no timestamp; CMC does not verify them).
-- sellable_pct["1"|"7"|"30"]: share of reported reserves that could be sold within 1, 7 or 30 days, capping each holding at days x that token's global 24h trading volume in dollars. A best case: it assumes the exchange could sell into all of the world's trading.
-- volume_24h_usd: the token's global trading volume over 24 hours, in dollars.
-- days_to_sell: holding value / volume_24h_usd. null means zero volume.
-- no_market_pct: share of reserves in tokens with zero 24h trading volume.
-- supply_pct: exchange's balance as a share of the token's circulating supply; null means CMC reports no circulating supply.
+Fields in DATA (all values are pre-formatted from the live CoinMarketCap data):
+- reported: sum of balance x latest price for every wallet CoinMarketCap lists for the exchange (wallets over $500k only; balances have no timestamp; CMC does not verify them).
+- sellable_within: share of reported reserves that could be sold within 1, 7 or 30 days, capping each holding at days x that token's global 24h trading volume. A best case: it assumes the exchange could sell into all of the world's trading.
+- time_to_sell_half / time_to_sell_90_percent: exact time until 50% / 90% of reported reserves becomes sellable; "never" when tokens with no trading block it.
+- no_market: share of reserves in tokens with zero 24h trading volume.
+- For each holding: value, share of reserves, volume_24h (global trading in dollars over 24 hours), time_to_sell (value / volume_24h), share_of_supply (exchange's balance / circulating supply).
 
 Rules:
 - Use ONLY the DATA provided. If the answer is not in it, say the data doesn't show that.
 - Never tell the user to buy, sell, withdraw, move or keep funds, and never call an exchange safe or unsafe.
 - Reserves are assets only; they say nothing about what an exchange owes (not solvency). Mention this only when the question is about safety, risk or solvency.
 - Write for a non-expert: 2 to 4 short sentences, no markdown, no lists.
-- Round like a person: money as $1.4B, $406M, $186K; percentages as whole numbers ("under 1%" when below 1); days as whole numbers, or years when over two years.
-- Never mention field names or raw decimals."""
+- Copy numbers exactly as written in DATA. Never recompute, re-round or estimate them.
+- Never mention field names."""
 
 
 class RateLimiter:
@@ -73,46 +74,57 @@ class RateLimiter:
             return True
 
 
-def _pct(x):
-    return None if x is None else round(x * 100, 1)
-
-
-def _money(x):
-    return None if x is None else float(f"{x:.3g}")
-
-
 def context(view, slug):
-    """Compact JSON extract of the live view for the model: pre-rounded, dollar-labelled."""
-    out = {"prices_fetched_at": view.get("quotes_fetched_at"), "coverage": view.get("coverage")}
+    """Compact JSON extract of the live view for the model, pre-formatted with the
+    same rounding the page uses so answers quote the page's numbers exactly."""
+    out = {"prices_fetched_at": view.get("quotes_fetched_at")}
     ex = view["by_slug"].get(slug) if slug else None
     if ex and ex.get("has_data"):
+        sw = sorted({n for v in ex.get("shared_wallets", {}).values() for n in v})
         out["exchange"] = {
             "name": ex["name"],
-            "reported_usd": _money(ex["reported_usd"]),
-            "sellable_pct": {str(k): _pct(v) for k, v in ex["sellable_share"].items()},
-            "sellable_usd": {str(k): _money(v) for k, v in ex["sellable_usd"].items()},
-            "no_market_pct": _pct(ex["no_market_share"]),
-            "weekly_visits": ex.get("weekly_visits"),
-            "notice": ex.get("notice"),
-            "wallets_also_listed_by": sorted({n for v in ex.get("shared_wallets", {}).values() for n in v}),
+            "reported": metric.money_label(ex["reported_usd"]),
+            "sellable_within": {f"{n} day{'s' if n > 1 else ''}": f"{metric.pct_label(ex['sellable_share'][n])} ({metric.money_label(ex['sellable_usd'][n])})"
+                                for n in metric.HORIZONS},
+            "time_to_sell_half": _milestone(ex["days_to_share"]["50"]),
+            "time_to_sell_90_percent": _milestone(ex["days_to_share"]["90"]),
+            "no_market": f"{metric.pct_label(ex['no_market_share'])} ({metric.money_label(ex['no_market_usd'])})",
+            "weekly_visits": f"{ex['weekly_visits']:,}" if ex.get("weekly_visits") is not None else "not published",
+            **({"notice": ex["notice"]} if ex.get("notice") else {}),
+            **({"wallets_also_listed_by": sw} if sw else {}),
             "token_count": len(ex["holdings"]),
             "top_holdings": [{
-                "symbol": h["symbol"], "name": h["name"], "share_pct": _pct(h["share"]), "value_usd": _money(h["usd"]),
-                "volume_24h_usd": _money(h["volume_24h"]),
-                "days_to_sell": None if h["days_to_sell"] is None else round(h["days_to_sell"], 1),
-                "supply_pct": None if h["supply_share"] is None else round(h["supply_share"] * 100, 3),
+                "symbol": h["symbol"], "name": h["name"], "value": metric.money_label(h["usd"]),
+                "share_of_reserves": metric.pct_label(h["share"]),
+                "volume_24h": metric.money_label(h["volume_24h"]) if h["volume_24h"] else "$0",
+                "time_to_sell": metric.days_label(h["days_to_sell"]),
+                "share_of_supply": _supply(h["supply_share"]),
             } for h in ex["holdings"][:TOP_HOLDINGS]],
         }
         return json.dumps(out, separators=(",", ":"))
     if ex:
-        out["exchange"] = {"name": ex["name"], "publishes_reserves": False, "weekly_visits": ex.get("weekly_visits")}
+        out["exchange"] = {"name": ex["name"], "publishes_reserves": False}
+    cov = view.get("coverage") or {}
+    out["coverage"] = f"{cov.get('with_data')} of the top {cov.get('listed')} exchanges publish reserves"
     # No single exchange with data in view: one line per exchange instead.
     out["all_exchanges"] = [{
-        "name": e["name"], "reported_usd": _money(e["reported_usd"]),
-        "sellable_7d_pct": _pct(e["sellable_share"][7]), "no_market_pct": _pct(e["no_market_share"]),
+        "name": e["name"], "reported": metric.money_label(e["reported_usd"]),
+        "sellable_7_days": metric.pct_label(e["sellable_share"][7]), "no_market": metric.pct_label(e["no_market_share"]),
         "largest_holding": e.get("top_symbol"), **({"has_notice": True} if e.get("notice") else {}),
     } for e in view["exchanges"] if e.get("has_data")]
     return json.dumps(out, separators=(",", ":"))
+
+
+def _milestone(d):
+    return "never (tokens with no trading block it)" if d is None else metric.days_label(d)
+
+
+def _supply(x):
+    if x is None:
+        return "not reported"
+    if x < 0.0001:
+        return "under 0.01%"
+    return f"{x * 100:.2f}%" if x < 0.01 else f"{x * 100:.1f}%"
 
 
 class Asker:

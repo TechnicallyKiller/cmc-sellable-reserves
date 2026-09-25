@@ -4,6 +4,9 @@ from collections import defaultdict
 
 HORIZONS = (1, 7, 30)
 HEADLINE_HORIZON = 7
+MILESTONES = (0.5, 0.9)
+# 1 to 365 days, log-spaced, for the liquidity curve.
+CURVE_DAYS = [round(365 ** (i / 59), 4) for i in range(60)]
 _EVM = re.compile(r"^0x[0-9a-fA-F]{40}$")
 
 
@@ -93,7 +96,11 @@ def compute_exchange(rows, quotes):
     for h in holdings:
         h["share"] = h["usd"] / reported if reported else None
 
+    liquid = [h for h in holdings if h["volume_24h"] > 0]
     return {
+        "curve": [[d, sellable_at(liquid, d) / reported if reported else None] for d in CURVE_DAYS],
+        "ceiling_share": (reported - no_market) / reported if reported else None,
+        "days_to_share": {str(int(f * 100)): days_to_reach(liquid, f * reported) for f in MILESTONES},
         "reported_usd": reported,
         "sellable_usd": sellable,
         "sellable_share": {n: (v / reported if reported else None) for n, v in sellable.items()},
@@ -102,6 +109,67 @@ def compute_exchange(rows, quotes):
         "holdings": holdings,
         "unpriced": unpriced,
     }
+
+
+def sellable_at(liquid, days):
+    """USD sellable within `days`: each holding capped at days × its 24h volume."""
+    return sum(min(h["usd"], days * h["volume_24h"]) for h in liquid)
+
+
+def days_to_reach(liquid, target_usd):
+    """Exact days until `target_usd` becomes sellable, or None if never.
+
+    sellable(d) = Σ usd_i over holdings already fully sold by day d
+                + d × Σ volume_i over the rest.
+    It is piecewise linear with breakpoints at each holding's days_to_sell,
+    so solve it segment by segment. Zero-volume holdings never count.
+    """
+    if target_usd <= 0:
+        return 0.0
+    rows = sorted(liquid, key=lambda h: h["usd"] / h["volume_24h"])
+    done_usd = 0.0
+    rest_vol = sum(h["volume_24h"] for h in rows)
+    prev = 0.0
+    for h in rows:
+        brk = h["usd"] / h["volume_24h"]
+        at_brk = done_usd + brk * rest_vol
+        if at_brk >= target_usd:
+            return max(prev, (target_usd - done_usd) / rest_vol)
+        done_usd += h["usd"]
+        rest_vol -= h["volume_24h"]
+        prev = brk
+    return None  # target exceeds everything sellable (no-market holdings block it)
+
+
+def money_label(x):
+    """Same rounding as the frontend: 3 significant figures, $B/$M/$K."""
+    if x is None:
+        return None
+    for unit, div in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
+        if x >= div:
+            return f"${float(f'{x / div:.3g}'):g}{unit}"
+    return f"${x:.2f}"
+
+
+def pct_label(x):
+    """Same rules as the frontend's pctLabel."""
+    if x is None:
+        return None
+    if x == 0:
+        return "0%"
+    if x < 0.01:
+        return "under 1%"
+    if 0.995 <= x < 1:
+        return "99%"
+    return f"{round(x * 100)}%"
+
+
+def days_label(d):
+    if d is None:
+        return "never (no trading in the last 24 hours)"
+    if d < 0.1:
+        return "under 0.1 days"
+    return duration(d)
 
 
 def _money(x):

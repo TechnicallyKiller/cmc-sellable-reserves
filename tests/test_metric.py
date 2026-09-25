@@ -107,3 +107,33 @@ class Sentences(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Milestones(unittest.TestCase):
+    def _liquid(self, name):
+        res = metric.compute_exchange(metric.clean_rows(rows(name))[0], QUOTES)
+        return res, [h for h in res["holdings"] if h["volume_24h"] > 0]
+
+    def test_days_to_reach_matches_brute_force(self):
+        res, liquid = self._liquid("ourbit")
+        for f in (0.1, 0.5, 0.9, 0.99):
+            target = f * res["reported_usd"]
+            d = metric.days_to_reach(liquid, target)
+            self.assertIsNotNone(d)
+            # exact: sellable at d hits the target, and a hair earlier it doesn't
+            self.assertAlmostEqual(metric.sellable_at(liquid, d), target, delta=target * 1e-9)
+            self.assertLess(metric.sellable_at(liquid, d * (1 - 1e-6)), target)
+
+    def test_unreachable_when_no_market_blocks_it(self):
+        res, liquid = self._liquid("blockfinex")
+        self.assertLess(res["ceiling_share"], 0.5)
+        self.assertIsNone(res["days_to_share"]["50"])
+        self.assertIsNone(res["days_to_share"]["90"])
+
+    def test_curve_is_monotone_and_capped_by_ceiling(self):
+        res, _ = self._liquid("ourbit")
+        shares = [s for _, s in res["curve"]]
+        self.assertEqual(shares, sorted(shares))
+        self.assertLessEqual(shares[-1], res["ceiling_share"] + 1e-12)
+        self.assertEqual(res["curve"][0][0], 1)
+        self.assertEqual(res["curve"][-1][0], 365)
