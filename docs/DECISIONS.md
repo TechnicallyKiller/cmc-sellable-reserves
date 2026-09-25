@@ -396,6 +396,13 @@ stated on that page). Volume: 44 exchanges × 24 rows/day ≈ 1,056 rows/day.
 **Security.** RLS enabled with no policies, so the public anon key cannot
 read or write; the service key never leaves the server.
 
+**Verified (2026-09-25).** First live write: 44 rows at 04:04 UTC. Backfill
+from stored raw responses (`scripts/backfill_history.py`, same computation as
+the live server) added 02:00 and 03:00 UTC: 132 rows. Supabase's current
+secret keys (`sb_secret_...`) are not JWTs and must be sent only in the
+`apikey` header (Supabase API-keys docs); legacy `service_role` JWTs also get
+`Authorization: Bearer`.
+
 **Would be wrong if.** Supabase pauses the project despite hourly writes.
 Unverified; check the project dashboard after a few days.
 

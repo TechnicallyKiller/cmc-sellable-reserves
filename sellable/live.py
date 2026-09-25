@@ -93,7 +93,11 @@ class Live:
         ex_runs, q_runs = self.store.runs("exchanges"), self.store.runs("quotes")
         if not ex_runs or not q_runs:
             raise FileNotFoundError(f"no stored runs under {self.store.root}")
-        ts = ex_runs[-1]
+        self.load_from_store(ex_runs[-1], q_runs[-1])
+
+    def load_from_store(self, ts, qts):
+        """Rebuild state from one stored exchanges run and one stored quotes run."""
+        self.assets, self.collapsed, self.errors = {}, {}, {}
         m = self.store.read(f"exchanges/{ts}/map.json")
         self.exchanges = [{"id": e["id"], "name": e["name"], "slug": e["slug"]} for e in m["data"]]
         self.receipts = {"map": [f"exchanges/{ts}/map.json"]}
@@ -112,7 +116,6 @@ class Live:
             self.receipts["info"] = [f"exchanges/{ts}/info.json"]
         except FileNotFoundError:
             self.info = {}
-        qts = q_runs[-1]
         paths, bodies, i = [], [], 0
         while True:
             p = f"quotes/{qts}/quotes_{i}.json"

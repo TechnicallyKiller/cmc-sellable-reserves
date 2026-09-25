@@ -76,7 +76,7 @@ Optional environment variables:
 | Variable | Effect |
 |---|---|
 | `LLM_API_KEY` | Ask panel answers with an LLM grounded in the live data. Groq by default; any OpenAI-compatible endpoint via `LLM_BASE_URL`, models tried in order from `LLM_MODELS`. Without it, or when rate limited, answers are rule-based. |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Hourly history. Create the table once with [`docs/supabase_schema.sql`](docs/supabase_schema.sql). The service key stays on the server; the table has row-level security on and no public policies. |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Hourly history. Create the table once with [`docs/supabase_schema.sql`](docs/supabase_schema.sql). The service key stays on the server; the table has row-level security on and no public policies. `scripts/backfill_history.py` rebuilds past hours from the raw responses stored in `data/`. |
 
 ## Tests
 
