@@ -489,3 +489,34 @@ an exchange page threw from a ResizeObserver on the removed chart (fixed in
 de5f248). The local server was stopped once Render was live so that only one
 instance spends credits and writes history.
 
+---
+
+## D13 — Reserve anatomy on the exchange page (decided 2026-09-25)
+
+**What.** Peer ranking (all exchanges as sorted columns, this one outlined),
+a treemap of every holding sized by value and coloured by time to sell, a
+liquidity ladder (under a day / 1–7 days / 1–4 weeks / 1–12 months / over a
+year / no market), value by blockchain, concentration (top-1, top-5, inverse
+Herfindahl "behaves like N equal holdings", tokens/wallets/chains), and per
+holding the share of trading on centralized exchanges (CMC's
+`cex_volume_24h` / (cex + dex)) and the chains it is held on. All computed
+server-side (`sellable/metric.py`); tests check buckets and chains each sum
+to the reported total.
+
+**Colour decision.** First version used a one-hue green ramp (darker =
+faster). Rejected on review: LBank's 92% "over a year" rendered as light
+green, which reads as healthy, the opposite of the data. Replaced with a
+diverging scale around the 7-day headline: teal (within a week), neutral grey
+(1–4 weeks), orange (slower), darker = further from a week; no market stays
+hatched pink (texture, not hue). Green/brown poles failed colour-blind
+separation (deutan ΔE 4.8, normal 13.2 < 15); teal/orange passes (every pair
+≥ 13 ΔE; each arm one hue, monotone lightness). Tile labels picked per step
+for ≥ 4.5:1; hatched tiles use ink with a surface halo.
+
+**Peer chart.** A dot strip was tried first; ~25 exchanges near 100% stacked
+into a column that overflowed. Sorted columns show all 44 without overlap.
+
+**Would be wrong if.** Readers take the treemap's area as risk rather than
+value. The caption states what size and colour mean; the ladder repeats the
+same numbers as text.
+

@@ -16,6 +16,14 @@
   --mono:'JetBrains Mono',monospace;
   --chart:#16875A;--grid:rgba(31,29,24,.10);
   --calmText:#326D4C; /* green for small text: 5.2:1 on --bg (brand green is 4.34:1) */
+  /* Liquidity scale: diverging around the 7-day headline. Teal = sellable within a week,
+     neutral grey = 1-4 weeks, orange = slower; darker = further from the middle.
+     Validated (dataviz validator): each arm one hue, monotone lightness; every pair of
+     steps >= 13 CVD delta-E. Green/brown failed (deutan 4.8), hence teal/orange.
+     Labels: each --bNt clears 4.5:1 on its tile. */
+  --b0:#00606A;--b1:#0F919C;--b2:#A4A4A4;--b3:#BA6826;--b4:#7F3E00;
+  --b0t:#FFFFFF;--b1t:#0F140F;--b2t:#0F140F;--b3t:#0F140F;--b4t:#FFFFFF;
+  --b5a:#E30B5C;--b5b:#B8084A;--b5t:#FFFFFF;--other:#A39982;--othert:#1F1D18;
   color-scheme:light;
   interpolate-size:allow-keywords;
 }
@@ -25,6 +33,9 @@
   --sl:rgba(255,255,255,.06);--sd:rgba(0,0,0,.55);--hover:rgba(255,255,255,.05);--scrim:rgba(0,0,0,.6);
   --chart:#44A873;--grid:rgba(243,236,218,.10);
   --calmText:#6DBE8F;
+  --b0:#7FDCE6;--b1:#31A4AF;--b2:#696969;--b3:#CE7A3B;--b4:#FFB784;
+  --b0t:#0B0F0B;--b1t:#0B0F0B;--b2t:#F3ECDA;--b3t:#0B0F0B;--b4t:#0B0F0B;
+  --b5a:#FF3D82;--b5b:#C2185B;--b5t:#1F0610;--other:#6B707A;--othert:#F3ECDA;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -392,6 +403,53 @@ main:focus,h1[tabindex="-1"]:focus{outline:none}
 .chart-table th,.chart-table td{padding:8px 14px 8px 0;text-align:left;border-bottom:1px solid var(--hover);font-variant-numeric:tabular-nums}
 .chart-table thead th{color:var(--mut);font-weight:600;font-size:13px;letter-spacing:.04em;text-transform:uppercase}
 @keyframes bubbleIn{from{transform:scale(0);opacity:0}to{transform:none;opacity:1}}
+
+/* ---------- reserve anatomy ---------- */
+.chart-svg .tile{stroke:var(--bg);stroke-width:2;transform-box:fill-box;transform-origin:center;animation:tileIn .55s var(--ease-out) both;cursor:pointer}
+.chart-svg .tile.b0{fill:var(--b0)}.chart-svg .tile.b1{fill:var(--b1)}.chart-svg .tile.b2{fill:var(--b2)}
+.chart-svg .tile.b3{fill:var(--b3)}.chart-svg .tile.b4{fill:var(--b4)}.chart-svg .tile.b5{fill:url(#nm-hatch)}
+.chart-svg .tile.other{fill:var(--other);cursor:default}
+.chart-svg .hatch-a{fill:var(--b5a)}.chart-svg .hatch-b{fill:var(--b5b)}
+.chart-svg .tile-label{font-weight:800;font-size:13px;pointer-events:none;font-family:var(--display)}
+.chart-svg .tile-label.big{font-size:19px;letter-spacing:-.01em}
+.chart-svg .tile-sub{font-size:12px;font-weight:600;pointer-events:none;opacity:.9;font-variant-numeric:tabular-nums}
+.chart-svg .tile-label.b0,.chart-svg .tile-sub.b0{fill:var(--b0t)}.chart-svg .tile-label.b1,.chart-svg .tile-sub.b1{fill:var(--b1t)}
+.chart-svg .tile-label.b2,.chart-svg .tile-sub.b2{fill:var(--b2t)}.chart-svg .tile-label.b3,.chart-svg .tile-sub.b3{fill:var(--b3t)}
+.chart-svg .tile-label.b4,.chart-svg .tile-sub.b4{fill:var(--b4t)}
+/* Hatched tiles alternate two pinks, so no single text colour clears 4.5:1 on both: ink with a surface halo. */
+.chart-svg .tile-label.b5,.chart-svg .tile-sub.b5{fill:var(--ink);stroke:var(--bg);stroke-width:3px;paint-order:stroke;stroke-linejoin:round}
+.chart-svg .tile-label.other,.chart-svg .tile-sub.other{fill:var(--othert)}
+.treemap-host{padding:8px}
+@keyframes tileIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}
+.b5-hatch,.ladder-bar .b5,.ladder .sw.b5{background:repeating-linear-gradient(135deg,var(--b5a) 0 4px,var(--b5b) 4px 7px)}
+.ladder-bar{display:flex;height:18px;border-radius:10px;overflow:hidden;box-shadow:var(--inset-sm);padding:3px;gap:2px}
+.ladder-bar span{display:block;height:100%;width:0;border-radius:4px;transition:width .9s var(--ease-out)}
+.ladder-bar .b0,.ladder .sw.b0{background:var(--b0)}.ladder-bar .b1,.ladder .sw.b1{background:var(--b1)}.ladder-bar .b2,.ladder .sw.b2{background:var(--b2)}
+.ladder-bar .b3,.ladder .sw.b3{background:var(--b3)}.ladder-bar .b4,.ladder .sw.b4{background:var(--b4)}
+.ladder{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:4px 20px}
+.ladder li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:12px;align-items:start;padding:10px 4px;border-bottom:1px solid var(--hover)}
+.ladder li.empty .sw{opacity:.3}
+.ladder .sw{width:18px;height:18px;border-radius:6px;margin-top:2px}
+.ladder .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ladder .t b{font-size:15.5px}
+.ladder .t span{font-size:13.5px;color:var(--mut);line-height:1.35}
+.ladder .r{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.ladder .r b{font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.ladder .r span{font-size:13px;color:var(--mut)}
+.chain-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.chain-list li{display:grid;grid-template-columns:minmax(90px,130px) minmax(0,1fr) auto;gap:12px;align-items:center}
+.chain-list .nm{font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chain-list .meter span{background:var(--chart)}
+.chain-list .r{display:flex;flex-direction:column;align-items:flex-end;min-width:64px}
+.chain-list .r b{font-weight:800;font-variant-numeric:tabular-nums}
+.chain-list .r span{font-size:12.5px;color:var(--mut)}
+.conc{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.conc .stat{padding:14px 16px;border-radius:18px;gap:4px}
+.conc .v.big{font-family:var(--display);font-weight:800;font-size:34px;letter-spacing:-.03em;line-height:1}
+.conc .s{font-size:13px;color:var(--mut);line-height:1.35}
+.chart-svg .peer-col{fill:var(--chart);fill-opacity:.4;transform-box:fill-box;transform-origin:bottom;animation:colUp .6s var(--ease-out) both}
+.chart-svg .peer-col.me{fill-opacity:1;stroke:var(--ink);stroke-width:1.5}
+.hold-meta{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--mut);line-height:1.4}
 
 /* ---------- docs & mcp pages ---------- */
 .doc{max-width:1000px;width:100%;margin:0 auto;padding:8px clamp(16px,4vw,40px) 160px;display:flex;flex-direction:column;gap:26px}

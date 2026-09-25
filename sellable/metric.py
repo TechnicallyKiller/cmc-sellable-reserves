@@ -5,6 +5,16 @@ from collections import defaultdict
 HORIZONS = (1, 7, 30)
 HEADLINE_HORIZON = 7
 MILESTONES = (0.5, 0.9)
+# Liquidity buckets by days to sell; index 5 is "no market" (zero 24h volume).
+BUCKETS = ((1, "Under a day"), (7, "1–7 days"), (30, "1–4 weeks"), (365, "1–12 months"), (float("inf"), "Over a year"))
+NO_MARKET_BUCKET = len(BUCKETS)
+TOP_CHAINS = 7
+
+
+def bucket_of(days_to_sell):
+    if days_to_sell is None:
+        return NO_MARKET_BUCKET
+    return next(i for i, (edge, _) in enumerate(BUCKETS) if days_to_sell < edge)
 # 1 to 365 days, log-spaced, for the liquidity curve.
 CURVE_DAYS = [round(365 ** (i / 59), 4) for i in range(60)]
 _EVM = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -83,6 +93,8 @@ def compute_exchange(rows, quotes):
             "days_to_sell": usd / vol if vol > 0 else None,
             "supply_share": t["balance"] / circ if circ > 0 else None,
             "quote_last_updated": q["last_updated"],
+            "cex_share": _cex_share(q),
+            "chains": sorted({w["platform"] for w in t["wallets"]}),
             "wallets": t["wallets"],
         })
     holdings.sort(key=lambda h: h["usd"], reverse=True)
@@ -97,7 +109,12 @@ def compute_exchange(rows, quotes):
         h["share"] = h["usd"] / reported if reported else None
 
     liquid = [h for h in holdings if h["volume_24h"] > 0]
+    for h in holdings:
+        h["bucket"] = bucket_of(h["days_to_sell"])
     return {
+        "buckets": _buckets(holdings, reported),
+        "chains": _chains(holdings, reported),
+        "concentration": _concentration(holdings),
         "curve": [[d, sellable_at(liquid, d) / reported if reported else None] for d in CURVE_DAYS],
         "ceiling_share": (reported - no_market) / reported if reported else None,
         "days_to_share": {str(int(f * 100)): days_to_reach(liquid, f * reported) for f in MILESTONES},
@@ -108,6 +125,56 @@ def compute_exchange(rows, quotes):
         "no_market_share": no_market / reported if reported else None,
         "holdings": holdings,
         "unpriced": unpriced,
+    }
+
+
+def _cex_share(q):
+    """Share of the token's 24h volume on centralized exchanges; None when CMC gives no split."""
+    cex, dex = q.get("cex_volume_24h"), q.get("dex_volume_24h")
+    if cex is None or dex is None or cex + dex <= 0:
+        return None
+    return cex / (cex + dex)
+
+
+def _buckets(holdings, reported):
+    labels = [lab for _, lab in BUCKETS] + ["No market"]
+    out = [{"label": lab, "usd": 0.0, "tokens": 0} for lab in labels]
+    for h in holdings:
+        out[h["bucket"]]["usd"] += h["usd"]
+        out[h["bucket"]]["tokens"] += 1
+    for b in out:
+        b["share"] = b["usd"] / reported if reported else None
+    return out
+
+
+def _chains(holdings, reported):
+    """Reported value by blockchain (CoinMarketCap's platform name), top chains plus the rest."""
+    by = defaultdict(float)
+    for h in holdings:
+        for w in h["wallets"]:
+            by[w["platform"]] += w["balance"] * h["price"]
+    ranked = sorted(by.items(), key=lambda kv: kv[1], reverse=True)
+    out = [{"chain": c, "usd": v} for c, v in ranked[:TOP_CHAINS]]
+    rest = ranked[TOP_CHAINS:]
+    if rest:
+        out.append({"chain": f"{len(rest)} other chain{'s' if len(rest) > 1 else ''}", "usd": sum(v for _, v in rest), "other": True})
+    for c in out:
+        c["share"] = c["usd"] / reported if reported else None
+    return out
+
+
+def _concentration(holdings):
+    shares = [h["share"] for h in holdings if h["share"]]
+    if not shares:
+        return None
+    return {
+        "top1_share": shares[0],
+        "top5_share": sum(shares[:5]),
+        # Inverse Herfindahl index: reserves behave like this many equal-sized holdings.
+        "effective_tokens": 1 / sum(x * x for x in shares),
+        "tokens": len(shares),
+        "wallets": len({w["address"].lower() for h in holdings for w in h["wallets"]}),
+        "chains": len({w["platform"] for h in holdings for w in h["wallets"]}),
     }
 
 

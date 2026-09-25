@@ -137,3 +137,26 @@ class Milestones(unittest.TestCase):
         self.assertLessEqual(shares[-1], res["ceiling_share"] + 1e-12)
         self.assertEqual(res["curve"][0][0], 1)
         self.assertEqual(res["curve"][-1][0], 365)
+
+
+class Anatomy(unittest.TestCase):
+    def test_buckets_partition_reserves(self):
+        for name in ("ourbit", "blockfinex"):
+            res = metric.compute_exchange(metric.clean_rows(rows(name))[0], QUOTES)
+            self.assertAlmostEqual(sum(b["usd"] for b in res["buckets"]), res["reported_usd"], places=2)
+            self.assertAlmostEqual(res["buckets"][metric.NO_MARKET_BUCKET]["usd"], res["no_market_usd"], places=2)
+
+    def test_bucket_edges(self):
+        self.assertEqual([metric.bucket_of(d) for d in (0.5, 1, 6.9, 7, 29, 364, 365, 5000, None)],
+                         [0, 1, 1, 2, 2, 3, 4, 4, metric.NO_MARKET_BUCKET])
+
+    def test_chains_sum_to_reported(self):
+        res = metric.compute_exchange(metric.clean_rows(rows("ourbit"))[0], QUOTES)
+        self.assertAlmostEqual(sum(c["usd"] for c in res["chains"]), res["reported_usd"], places=2)
+
+    def test_concentration(self):
+        res = metric.compute_exchange(metric.clean_rows(rows("blockfinex"))[0], QUOTES)
+        c = res["concentration"]
+        self.assertGreater(c["top1_share"], 0.95)
+        self.assertLess(c["effective_tokens"], 1.1)  # effectively one token
+        self.assertLessEqual(c["top1_share"], c["top5_share"])

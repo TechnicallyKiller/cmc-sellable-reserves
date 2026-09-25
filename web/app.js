@@ -260,6 +260,8 @@ function exchangeHTML(d) {
         </div>
       </section>
     </div>
+    ${peersHTML(d, notices.length + 3)}
+    ${anatomyHTML(d, notices.length + 3)}
     ${curveHTML(d, notices.length + 3)}
     <section class="card chart-card" id="history-card" hidden style="--i:${notices.length + 3}"></section>
     <section style="display:flex;flex-direction:column;gap:18px;--i:${notices.length + 3}">
@@ -274,11 +276,108 @@ function exchangeHTML(d) {
   </section>`;
 }
 
+const bucketLabel = k => ['Under a day to sell', '1–7 days to sell', '1–4 weeks to sell', '1–12 months to sell', 'Over a year to sell', 'No market'][k];
 const milestoneLabel = v => v == null ? 'Never' : daysLabel(v);
 const exactShare = d => {
   const liq = d.holdings.filter(h => h.volume_24h > 0);
   return days => liq.reduce((a, h) => a + Math.min(h.usd, days * h.volume_24h), 0) / d.reported_usd;
 };
+
+const BUCKET_NOTE = ['sellable within a day', 'within a week', 'within a month', 'within a year', 'over a year, even at full global volume', 'no trading at all in 24h'];
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+
+function peerRank(d) {
+  const all = withData().map(x => ({ slug: x.slug, v: x.sellable_share[state.hz] ?? 0 })).sort((a, b) => b.v - a.v);
+  const mine = d.sellable_share[state.hz] ?? 0;
+  return { rank: all.filter(x => x.v > mine).length + 1, of: all.length };
+}
+
+function peersHTML(d, i) {
+  const { rank, of } = peerRank(d);
+  return `<section class="card chart-card" style="--i:${i}">
+    <div class="chart-head"><div>
+      <h2 class="h2" style="font-size:clamp(22px,2.4vw,28px)">Among the ${of} exchanges that publish reserves</h2>
+      <p class="chart-sub" data-bind="rankText">${esc(d.name)} ranks <strong>${ordinal(rank)} of ${of}</strong> for the share of reserves sellable within ${HZ[state.hz].short}. Each column is an exchange, most sellable on the left.</p>
+    </div></div>
+    <div class="chart" id="peers"></div>
+  </section>`;
+}
+
+function drawPeers(d) {
+  const host = $('#peers'); if (!host) return;
+  const { rank, of } = peerRank(d);
+  const rt = $('[data-bind="rankText"]');
+  if (rt) rt.innerHTML = `${esc(d.name)} ranks <strong>${ordinal(rank)} of ${of}</strong> for the share of reserves sellable within ${HZ[state.hz].short}. Each column is an exchange, most sellable on the left.`;
+  const pts = withData().map(x => ({ id: x.slug, name: x.name, v: x.sellable_share[state.hz] ?? 0, current: x.slug === d.slug }));
+  Charts.responsive(host, () => Charts.strip(host, {
+    points: pts, label: `${d.name} · ${pctLabel(d.sellable_share[state.hz])}%`,
+    fmt: (p, rank) => [`${p.name} · ${pctLabel(p.v)}%`, `${ordinal(rank)} · sellable within ${HZ[state.hz].short}`],
+    aria: `${d.name} is ${ordinal(rank)} of ${of} exchanges for share sellable within ${HZ[state.hz].short}, at ${pctLabel(d.sellable_share[state.hz])}%.`,
+  }));
+}
+
+function anatomyHTML(d, i) {
+  const c = d.concentration, top = d.holdings[0];
+  const ladder = d.buckets.map((b, k) => `<li class="${b.usd ? '' : 'empty'}"><span class="sw b${k}" aria-hidden="true"></span>
+      <span class="t"><b>${esc(b.label)}</b><span>${b.tokens} token${b.tokens === 1 ? '' : 's'} · ${BUCKET_NOTE[k]}</span></span>
+      <span class="r"><b>${pctLabel(b.share)}%</b><span>${money(b.usd)}</span></span></li>`).join('');
+  const chains = d.chains.map(ch => `<li><span class="nm" title="${esc(ch.chain)}">${esc(ch.chain)}</span>
+      <span class="meter"><span data-w="${Math.max(0.5, ch.share * 100)}"></span></span>
+      <span class="r"><b>${pctLabel(ch.share)}%</b><span>${money(ch.usd)}</span></span></li>`).join('');
+  return `<section class="card chart-card" style="--i:${i}">
+      <div class="chart-head"><div>
+        <h2 class="h2" style="font-size:clamp(24px,2.6vw,32px)">Where the ${money(d.reported_usd)} really sits</h2>
+        <p class="chart-sub">Every holding as a tile: size is its value, colour is how long it would take to sell using all of the world's trading. Teal sells within a week, grey takes 1–4 weeks, orange takes longer; the darker the tile, the further from a week. Hatched pink has no market at all. Tap a tile for its details.</p>
+      </div></div>
+      <div class="chart treemap-host" id="treemap"></div>
+      <div class="ladder-bar" role="img" aria-label="${esc(d.buckets.map(b => `${b.label} ${pctLabel(b.share)}%`).join(', '))}">${d.buckets.map((b, k) => `<span class="b${k}" data-w="${b.share * 100}"></span>`).join('')}</div>
+      <ol class="ladder">${ladder}</ol>
+    </section>
+    <div class="ex-grid" style="--i:${i}">
+      <section class="card chart-card">
+        <h2 class="h2" style="font-size:clamp(22px,2.4vw,28px)">By blockchain</h2>
+        <p class="chart-sub">Where the reported wallets hold the money, by network (CoinMarketCap's platform names).</p>
+        <ul class="chain-list">${chains}</ul>
+      </section>
+      <section class="card chart-card">
+        <h2 class="h2" style="font-size:clamp(22px,2.4vw,28px)">Concentration</h2>
+        <p class="chart-sub">How much rides on a few tokens.</p>
+        <div class="conc">
+          <div class="stat inset"><span class="k">Largest holding</span><span class="v big">${pctLabel(c.top1_share)}%</span><span class="s">${esc(top.symbol)} · ${money(top.usd)}</span></div>
+          <div class="stat inset"><span class="k">Top 5 holdings</span><span class="v big">${pctLabel(c.top5_share)}%</span><span class="s">of reported reserves</span></div>
+          <div class="stat inset"><span class="k">Behaves like</span><span class="v big">${c.effective_tokens < 10 ? c.effective_tokens.toFixed(1) : Math.round(c.effective_tokens)}</span><span class="s">equal-sized holdings (inverse Herfindahl)</span></div>
+          <div class="stat inset"><span class="k">Spread across</span><span class="v big">${c.tokens}</span><span class="s">tokens · ${c.wallets} wallets · ${c.chains} chains</span></div>
+        </div>
+      </section>
+    </div>`;
+}
+
+function drawTreemap(d) {
+  const host = $('#treemap'); if (!host) return;
+  const main = d.holdings.filter(h => h.share >= 0.003).slice(0, 40);
+  const rest = d.holdings.slice(main.length);
+  const items = main.map(h => ({
+    id: h.token_id, label: h.symbol, sub: pctLabel(h.share) + '%', value: h.usd, cls: 'b' + h.bucket,
+    tip: [`${h.symbol} · ${pctLabel(h.share)}% · ${money(h.usd)}`, h.volume_24h === 0 ? 'no trading in the last 24 hours' : `${daysLabel(h.days_to_sell).toLowerCase()} to sell`],
+  }));
+  const restUsd = rest.reduce((a, h) => a + h.usd, 0);
+  if (rest.length && restUsd > 0) items.push({ id: null, label: `${rest.length} more`, sub: pctLabel(restUsd / d.reported_usd) + '%', value: restUsd, cls: 'other',
+    tip: [`${rest.length} smaller holdings · ${money(restUsd)}`, 'each under 0.3% of reserves; all listed below'] });
+  Charts.responsive(host, () => Charts.treemap(host, {
+    items, height: Math.min(380, Math.max(240, host.clientWidth * 0.42)),
+    onPick: id => { if (id == null) return; openHolding(d, id); },
+    aria: `Treemap of ${d.name}'s ${d.holdings.length} holdings by value, coloured by time to sell. Largest: ${d.holdings.slice(0, 3).map(h => `${h.symbol} ${pctLabel(h.share)}%`).join(', ')}.`,
+  }));
+}
+
+function openHolding(d, id) {
+  const idx = d.holdings.findIndex(h => h.token_id === id);
+  if (idx >= state.holdsShown) { state.holdsShown = d.holdings.length; $('#holds').innerHTML = holdsHTML(d, false); growBars($('#holds')); }
+  const card = $(`.hold[data-token="${id}"]`); if (!card) return;
+  if (!state.open.has(id)) toggleHold(card);
+  card.scrollIntoView({ behavior: reduceMotion.matches ? 'auto' : 'smooth', block: 'center' });
+  $('.hold-btn', card).focus({ preventScroll: true });
+}
 
 function curveHTML(d, i) {
   const half = d.days_to_share['50'], ninety = d.days_to_share['90'];
@@ -378,6 +477,7 @@ function holdHTML(h, i, animate) {
         <span><span class="k">Days to sell</span><span class="v${nm ? ' never' : ' small'}">${daysLabel(h.days_to_sell)}</span></span>
         <span><span class="k">Share of all ${esc(h.symbol)}</span><span class="v small">${supplyLabel(h.supply_share)}</span></span>
       </span>
+      <span class="hold-meta">${h.cex_share == null ? '' : `<span>${pctLabel(h.cex_share)}% of trading on centralized exchanges</span>`}<span>Held on ${esc(h.chains.join(', '))}</span></span>
       <span class="hold-more"><i>+</i>${open ? 'Hide details' : 'Wallets, balance, volume'}</span>
     </button>
     <div class="hold-detail" id="hd-${h.token_id}"><div class="hold-detail-in">
@@ -385,6 +485,7 @@ function holdHTML(h, i, animate) {
         <span>Balance</span><span>${num(h.balance)} ${esc(h.symbol)}</span>
         <span>Price</span><span>${usdFull(h.price)}</span>
         <span>24h volume</span><span>${h.volume_24h === 0 ? '$0, no trading recorded' : usdFull(h.volume_24h)}</span>
+        <span>Liquidity</span><span>${esc(bucketLabel(h.bucket))}</span>
         <span>Wallets</span><span>${h.wallets.length}</span>
       </div>
       <div class="wallets"><ul>${wallets.map(w => `<li><span class="addr">${esc(w.address)}</span><span class="mut">${esc(w.platform)} · ${num(w.balance)}</span>${w.also_claimed_by ? `<span class="also">Also listed by ${esc(w.also_claimed_by.join(', '))}</span>` : ''}</li>`).join('')}</ul>
@@ -572,7 +673,7 @@ function bindView(r) {
   if (r.screen === 'home' && ready()) bindSearch();
   if (r.screen === 'exchange') {
     const d = state.details[r.slug];
-    if (d && d.has_data) { paintExchangeNumbers(d); drawCurve(d); drawHistory(d); }
+    if (d && d.has_data) { paintExchangeNumbers(d); drawPeers(d); drawTreemap(d); drawCurve(d); drawHistory(d); }
   }
   if (r.screen === 'compare') drawScatter();
 }
@@ -588,7 +689,7 @@ $('#view').addEventListener('click', ev => {
   if (t.dataset.hz) {
     state.hz = +t.dataset.hz;
     syncUrl();
-    if (d) { paintExchangeNumbers(d, { swapSentence: true }); curveApi?.setMarker(state.hz); drawHistory(d); }
+    if (d) { paintExchangeNumbers(d, { swapSentence: true }); curveApi?.setMarker(state.hz); drawPeers(d); drawHistory(d); }
     if (r.screen === 'compare') {
       $$('[data-hz]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.hz === state.hz)));
       $('[data-bind="hzShort"]').textContent = HZ[state.hz].short; $('[data-bind="hzShort2"]').textContent = HZ[state.hz].short;
@@ -945,7 +1046,7 @@ async function poll() {
       paintExchangeNumbers(d);
       $('[data-bind="big"]')?.classList.remove('tick'); void $('[data-bind="big"]')?.offsetWidth; $('[data-bind="big"]')?.classList.add('tick');
       const holds = $('#holds'); if (holds) { holds.innerHTML = holdsHTML(d, false); $$('[data-w]', holds).forEach(e => { e.style.width = e.dataset.w + '%'; }); }
-      drawCurve(d);
+      drawCurve(d); drawPeers(d); drawTreemap(d);
     }
   } else if (r.screen === 'compare') {
     refreshRows();

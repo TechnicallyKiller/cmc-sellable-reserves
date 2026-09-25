@@ -234,6 +234,115 @@ const Charts = (() => {
     svg.addEventListener('blur', hideT);
   }
 
+  /* Squarified treemap (Bruls et al.): tiles sized by value, coloured by bucket class.
+     items [{id, label, value, cls, tip: [value, label]}] sorted by value descending. */
+  function squarify(items, x, y, w, h) {
+    const out = [], total = items.reduce((a, it) => a + it.value, 0);
+    if (!total) return out;
+    const scale = (w * h) / total;
+    let rest = items.map(it => ({ it, a: it.value * scale }));
+    const worst = (row, side) => {
+      const sum = row.reduce((a, r) => a + r.a, 0), mx = Math.max(...row.map(r => r.a)), mn = Math.min(...row.map(r => r.a));
+      return Math.max((side * side * mx) / (sum * sum), (sum * sum) / (side * side * mn));
+    };
+    while (rest.length) {
+      const side = Math.min(w, h);
+      let row = [rest[0]], i = 1;
+      while (i < rest.length && worst([...row, rest[i]], side) <= worst(row, side)) { row.push(rest[i]); i++; }
+      const sum = row.reduce((a, r) => a + r.a, 0);
+      if (w >= h) { // lay the row as a column on the left
+        const cw = sum / h; let cy = y;
+        for (const r of row) { const rh = r.a / cw; out.push({ ...r.it, x, y: cy, w: cw, h: rh }); cy += rh; }
+        x += cw; w -= cw;
+      } else {      // lay the row along the top
+        const rh = sum / w; let cx = x;
+        for (const r of row) { const rw = r.a / rh; out.push({ ...r.it, x: cx, y, w: rw, h: rh }); cx += rw; }
+        y += rh; h -= rh;
+      }
+      rest = rest.slice(i);
+    }
+    return out;
+  }
+
+  function treemap(host, opts) {
+    const { svg, w, h } = frame(host, opts.height || 340);
+    const tiles = squarify(opts.items, 0, 0, w, h);
+    // Hatch for "no market": texture as a second channel besides colour.
+    const defs = el('defs', {}, svg);
+    const pat = el('pattern', { id: 'nm-hatch', width: 8, height: 8, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+    el('rect', { width: 8, height: 8, class: 'hatch-a' }, pat);
+    el('rect', { width: 3, height: 8, class: 'hatch-b' }, pat);
+    const g = el('g', {}, svg);
+    tiles.forEach((t, i) => {
+      const r = el('rect', { x: t.x, y: t.y, width: Math.max(0, t.w), height: Math.max(0, t.h), rx: 6, class: 'tile ' + t.cls }, g);
+      r.style.animationDelay = Math.min(i, 30) * 22 + 'ms';
+      if (t.w > 54 && t.h > 34) {
+        const big = t.w > 110 && t.h > 60;
+        text(g, t.x + 10, t.y + (big ? 26 : 20), t.label, { class: 'tile-label ' + t.cls + (big ? ' big' : '') });
+        if (t.h > 50) text(g, t.x + 10, t.y + (big ? 48 : 38), t.sub, { class: 'tile-sub ' + t.cls });
+      }
+    });
+    const tip = tooltip(host);
+    const ring = el('rect', { class: 'hover-ring', rx: 6, visibility: 'hidden' }, g);
+    let cur = null;
+    const show = t => {
+      cur = t;
+      if (!t) { ring.setAttribute('visibility', 'hidden'); tip.hide(); return; }
+      for (const [k, v] of [['x', t.x + 1], ['y', t.y + 1], ['width', Math.max(0, t.w - 2)], ['height', Math.max(0, t.h - 2)]]) ring.setAttribute(k, v);
+      ring.setAttribute('visibility', 'visible');
+      tip.show(t.x + t.w / 2, t.y + Math.min(t.h / 2, 40), t.tip[0], t.tip[1]);
+    };
+    svg.addEventListener('pointermove', ev => {
+      const b = svg.getBoundingClientRect(), px = ev.clientX - b.left, py = ev.clientY - b.top;
+      show(tiles.find(t => px >= t.x && px <= t.x + t.w && py >= t.y && py <= t.y + t.h) || null);
+    });
+    svg.addEventListener('pointerleave', () => show(null));
+    svg.addEventListener('click', () => { if (cur && opts.onPick) opts.onPick(cur.id); });
+    let ki = -1;
+    svg.setAttribute('tabindex', '0'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', opts.aria);
+    svg.addEventListener('keydown', ev => {
+      if (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') {
+        ev.preventDefault(); ki = (ki + (ev.key === 'ArrowRight' ? 1 : -1) + tiles.length) % tiles.length; show(tiles[ki]);
+      } else if (ev.key === 'Enter' && cur && opts.onPick) opts.onPick(cur.id);
+      else if (ev.key === 'Escape') show(null);
+    });
+    svg.addEventListener('blur', () => show(null));
+  }
+
+  /* Peer ranking: every exchange as a thin column, sorted from most to least sellable;
+     the current one full-strength with an ink outline and a label. */
+  function strip(host, opts) {
+    const { svg, w, h } = frame(host, opts.height || 150);
+    const m = { l: 40, r: 8, t: 26, b: 14 };
+    const pts = [...opts.points].sort((a, b) => b.v - a.v);
+    const band = (w - m.l - m.r) / pts.length, bw = Math.max(3, Math.min(18, band - 2));
+    const y = linScale(0, 1, h - m.b, m.t);
+    const g = el('g', {}, svg);
+    for (const v of [0, 0.5, 1]) {
+      el('line', { x1: m.l, x2: w - m.r, y1: y(v), y2: y(v), class: 'grid' }, g);
+      text(g, m.l - 8, y(v) + 4, Math.round(v * 100) + '%', { class: 'tick', 'text-anchor': 'end' });
+    }
+    const cols = pts.map((p, i) => {
+      const x = m.l + i * band + (band - bw) / 2, top = y(Math.max(p.v, 0.004));
+      const r = el('rect', { x, y: top, width: bw, height: Math.max(1, y(0) - top), rx: Math.min(3, bw / 2), class: 'peer-col' + (p.current ? ' me' : '') }, g);
+      r.style.animationDelay = Math.min(i, 44) * 14 + 'ms';
+      return { ...p, cx: x + bw / 2, top };
+    });
+    const me = cols.find(c => c.current);
+    if (me) {
+      const right = me.cx < w - 150;
+      text(g, right ? me.cx + bw / 2 + 6 : me.cx - bw / 2 - 6, Math.max(m.t - 8, me.top - 8), opts.label, { class: 'label', 'text-anchor': right ? 'start' : 'end' });
+    }
+    const tip = tooltip(host);
+    svg.addEventListener('pointermove', ev => {
+      const b = svg.getBoundingClientRect(), i = Math.floor((ev.clientX - b.left - m.l) / band);
+      const c = cols[i];
+      if (c) { const [v, l] = opts.fmt(c, i + 1); tip.show(c.cx, c.top, v, l); } else tip.hide();
+    });
+    svg.addEventListener('pointerleave', () => tip.hide());
+    svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', opts.aria);
+  }
+
   // Redraw on container resize.
   function responsive(host, draw) {
     let last = host.clientWidth;
@@ -247,5 +356,5 @@ const Charts = (() => {
     ro.observe(host);
   }
 
-  return { curve, scatter, spark, responsive };
+  return { curve, scatter, spark, treemap, strip, responsive };
 })();
