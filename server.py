@@ -51,6 +51,8 @@ def make_handler(live: Live):
                     "exchanges_fetched_at": view.get("exchanges_fetched_at"),
                     "quotes_fetched_at": view.get("quotes_fetched_at"),
                     "coverage": view.get("coverage"),
+                    "receipts": view.get("receipts", {}),
+                    "mode": "live" if live.client else "replay",
                 })
             if url.path.startswith("/api/exchange/"):
                 slug = url.path.rsplit("/", 1)[-1]

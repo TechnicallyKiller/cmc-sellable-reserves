@@ -188,6 +188,7 @@ class Live:
             "exchanges_fetched_at": exchanges_at,
             "quotes_fetched_at": quotes_at,
             "coverage": {"listed": len(exchanges), "with_data": len(assets)},
+            "receipts": {"map": receipts.get("map", []), "quotes": receipts.get("quotes", [])},
         }
         with self._lock:
             self.view = view
